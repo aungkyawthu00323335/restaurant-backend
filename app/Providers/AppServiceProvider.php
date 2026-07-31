@@ -34,18 +34,22 @@ class AppServiceProvider extends ServiceProvider
      */
     public static function cleanPublicStorage(): void
     {
-        $disk = Storage::disk('public');
+        try {
+            $disk = Storage::disk('public');
 
-        $directories = $disk->directories();
-        foreach ($directories as $directory) {
-            $disk->deleteDirectory($directory);
-        }
-
-        $files = $disk->files();
-        foreach ($files as $file) {
-            if (! str_starts_with(basename($file), '.')) {
-                $disk->delete($file);
+            $directories = $disk->directories();
+            foreach ($directories as $directory) {
+                $disk->deleteDirectory($directory);
             }
+
+            $files = $disk->files();
+            foreach ($files as $file) {
+                if (! str_starts_with(basename($file), '.')) {
+                    $disk->delete($file);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Silently catch to prevent migration failures on restrictive filesystems
         }
     }
 }
