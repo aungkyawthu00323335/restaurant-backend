@@ -620,7 +620,9 @@ class CashierPanelController extends Controller
             ->findOrFail($id);
 
         $checkText = $this->buildCheckText($order);
-        $this->sendDocumentToPrinter($order, $checkText, 'check', false, $request->input('printer_id'));
+        if ($request->boolean('direct_print', false)) {
+            $this->sendDocumentToPrinter($order, $checkText, 'check', false, $request->input('printer_id'));
+        }
 
         return response()->json([
             'message' => 'Check printed successfully.',
@@ -636,10 +638,13 @@ class CashierPanelController extends Controller
 
         $billText = $this->buildBillText($order);
         $isReprint = $request->boolean('is_reprint', false);
-        $this->sendDocumentToPrinter($order, $billText, 'bill', $isReprint, $request->input('printer_id'));
+        if ($request->boolean('direct_print', false)) {
+            $this->sendDocumentToPrinter($order, $billText, 'bill', $isReprint, $request->input('printer_id'));
+        }
 
         return response()->json([
             'message' => 'Bill printed successfully.',
+            'check_text' => $billText,
             'bill_text' => $billText,
         ]);
     }
