@@ -1,0 +1,15 @@
+GLOBAL POS
+--------------------------------
+Order: DN20260715-0007
+Type: Dine-in
+Table: First Floor - FF02
+Customer: Walk-in Customer
+Pax: 1
+Staff: System
+--------------------------------
+Margherita Pizza x2
+  (Thick Crust, Extra Cheese)
+--------------------------------
+Created: 15/07/2026 08:15
+
+Thank you!

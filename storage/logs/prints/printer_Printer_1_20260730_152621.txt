@@ -1,0 +1,15 @@
+Order: DN20260730-0001
+Type: DINE-IN
+Table: Ground Floor - Table 1
+Customer: Walk-in Customer
+Pax: 1
+Staff: Super Admin
+Time: 30/07/2026 03:26 PM
+========================================
+ITEM	QTY
+----------------------------------------
+ခေါက်ဆွဲကြော်	1
+  + ထည့်မယ်, 1
+  Note: gm
+========================================
+*** END OF KOT ***

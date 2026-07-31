@@ -1,0 +1,44 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class PurchaseItem extends Model
+{
+    use HasFactory;
+
+    protected $guarded = [];
+
+    protected $casts = [
+        'quantity' => 'float',
+        'unit_price' => 'float',
+        'subtotal' => 'float',
+    ];
+
+    public function ingredient()
+    {
+        return $this->belongsTo(Ingredient::class);
+    }
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function foodMenu()
+    {
+        return $this->belongsTo(FoodMenu::class);
+    }
+
+    public function purchase()
+    {
+        return $this->belongsTo(Purchase::class);
+    }
+
+    public function purchaseUnit()
+    {
+        return $this->belongsTo(PurchaseUnit::class);
+    }
+}

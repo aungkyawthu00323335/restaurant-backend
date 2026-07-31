@@ -1,0 +1,13 @@
+Order: DN20260731-0001
+Type: DINE-IN
+Table: Ground Floor - Table 1
+Customer: Ba Tun
+Pax: 1
+Staff: Super Admin
+Time: 31/07/2026 02:03 PM
+========================================
+ITEM	QTY
+----------------------------------------
+Premium Mineral Water 1L	1
+========================================
+*** END OF KOT ***

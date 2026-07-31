@@ -1,0 +1,15 @@
+GLOBAL POS
+--------------------------------
+Order: DN20260715-0006
+Type: Dine-in
+Table: Ground Floor - GF05
+Customer: Walk-in Customer
+Pax: 1
+Staff: System
+--------------------------------
+Margherita Pizza x1
+  (Stuffed Crust, Olives)
+--------------------------------
+Created: 15/07/2026 08:12
+
+Thank you!

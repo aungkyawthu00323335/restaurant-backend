@@ -1,0 +1,17 @@
+Order: DN20260731-0003
+Type: DINE-IN
+Table: Ground Floor - Table 3
+Customer: Walk-in Customer
+Pax: 1
+Staff: Super Admin
+Time: 31/07/2026 06:05 AM
+========================================
+ITEM	QTY
+----------------------------------------
+Coca-Cola (Can)	1
+----------------------------------------
+Pepsi (Can)	1
+----------------------------------------
+Sprite (Can)	1
+========================================
+*** END OF KOT ***

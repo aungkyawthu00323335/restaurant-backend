@@ -1,0 +1,13 @@
+Order: DN20260731-0001
+Type: DINE-IN
+Table: Ground Floor - Table 5
+Customer: Walk-in Customer
+Pax: 1
+Staff: Super Admin
+Time: 31/07/2026 03:13 AM
+========================================
+ITEM	QTY
+----------------------------------------
+ကြက်သားဟင်း	1
+========================================
+*** END OF KOT ***

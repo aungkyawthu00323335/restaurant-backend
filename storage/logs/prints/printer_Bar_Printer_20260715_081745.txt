@@ -1,0 +1,16 @@
+GLOBAL POS
+--------------------------------
+Order: DN20260715-0001
+Type: Dine-in
+Table: Ground Floor - GF01
+Customer: Walk-in Customer
+Pax: 1
+Staff: System
+--------------------------------
+Iced Tea x1
+  (Large)
+  Note: vggg
+--------------------------------
+Created: 15/07/2026 08:17
+
+Thank you!
