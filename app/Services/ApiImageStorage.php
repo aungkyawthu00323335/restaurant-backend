@@ -50,7 +50,7 @@ class ApiImageStorage
             $this->invalid('The image could not be stored.');
         }
 
-        return Storage::disk('public')->url($path);
+        return 'storage/'.$path;
     }
 
     public function delete(?string $imageUrl, ?string $expectedDirectory = null): void

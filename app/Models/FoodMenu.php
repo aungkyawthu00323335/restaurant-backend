@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\LogsActivity;
+use App\Traits\NormalizesImageUrl;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class FoodMenu extends Model
 {
-    use HasFactory, LogsActivity;
+    use HasFactory, LogsActivity, NormalizesImageUrl;
     use SoftDeletes;
 
     public const STOCK_DEDUCTION_METHODS = [
