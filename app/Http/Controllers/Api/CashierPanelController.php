@@ -1190,11 +1190,6 @@ class CashierPanelController extends Controller
 
         $text .= str_pad('Thank you for dining with us!', $w, ' ', STR_PAD_BOTH)."\n";
         $text .= str_pad('Please visit again!', $w, ' ', STR_PAD_BOTH)."\n";
-        $text .= $sep;
-
-        // Paper Feed & ESC/POS Cutter Command (GS V 0)
-        $text .= "\n\n\n\n\x1B\x64\x04\x1D\x56\x00";
-
         return $text;
     }
 
@@ -1296,11 +1291,6 @@ class CashierPanelController extends Controller
         $text .= $sep;
         $text .= str_pad('Thank you for dining with us!', $w, ' ', STR_PAD_BOTH)."\n";
         $text .= str_pad('Please visit again!', $w, ' ', STR_PAD_BOTH)."\n";
-        $text .= $sep;
-
-        // Paper Feed & ESC/POS Cutter Command (GS V 0)
-        $text .= "\n\n\n\n\x1B\x64\x04\x1D\x56\x00";
-
         return $text;
     }
 
@@ -1449,21 +1439,8 @@ class CashierPanelController extends Controller
         if ($printerId) {
             $printers = collect([$query->find($printerId)])->filter();
         } else {
-            $printers = (clone $query)->where('name', 'like', '%cashier%')->get();
-            if ($printers->isEmpty()) {
-                $first = $query->first();
-                $printers = $first ? collect([$first]) : collect();
-            }
-        }
-
-        if ($printers->isEmpty()) {
-            Log::warning("No active Printer configured for {$documentType} of order {$order->order_no}.");
-            return;
-        }
-
-        // Ensure ESC/POS paper feed & cutter command is present at the end
-        if (! str_contains($text, "\x1D\x56")) {
-            $text .= "\n\n\n\n\x1B\x64\x04\x1D\x56\x00";
+            $target = (clone $query)->where('name', 'like', '%cashier%')->first() ?? $query->first();
+            $printers = $target ? collect([$target]) : collect();
         }
 
         foreach ($printers as $printer) {

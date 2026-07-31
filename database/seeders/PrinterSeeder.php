@@ -12,7 +12,7 @@ class PrinterSeeder extends Seeder
         Printer::query()->updateOrCreate(
             ['name' => 'Kitchen Printer'],
             [
-                'ip_address' => '127.0.0.1',
+                'ip_address' => '192.168.1.100',
                 'port' => 9100,
                 'paper_size' => '80mm',
                 'copies' => 1,
@@ -24,8 +24,8 @@ class PrinterSeeder extends Seeder
         Printer::query()->updateOrCreate(
             ['name' => 'Product Printer'],
             [
-                'ip_address' => '127.0.0.1',
-                'port' => 9101,
+                'ip_address' => '192.168.1.100',
+                'port' => 9100,
                 'paper_size' => '80mm',
                 'copies' => 1,
                 'is_active' => true,

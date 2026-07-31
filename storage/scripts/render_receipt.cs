@@ -6,6 +6,7 @@ using System.Drawing.Text;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
+using System.Windows.Forms;
 
 public class PrintItem
 {
@@ -140,9 +141,9 @@ public class Program
                                 using (Font fontV = new Font(fontFV, 17, item.is_bold ? FontStyle.Bold : FontStyle.Regular))
                                 {
                                     float colonX = padding + (is58mm ? 90 : 120);
-                                    g.DrawString(label, fontL, brush, padding, currentY);
-                                    g.DrawString(":", fontL, brush, colonX, currentY);
-                                    g.DrawString(val, fontV, brush, colonX + 15, currentY);
+                                    TextRenderer.DrawText(g, label, fontL, new Point(padding, currentY), Color.Black, TextFormatFlags.NoPadding);
+                                    TextRenderer.DrawText(g, ":", fontL, new Point((int)colonX, currentY), Color.Black, TextFormatFlags.NoPadding);
+                                    TextRenderer.DrawText(g, val, fontV, new Point((int)colonX + 15, currentY), Color.Black, TextFormatFlags.NoPadding);
                                 }
 
                                 currentY += 36;
@@ -182,27 +183,27 @@ public class Program
                                     float x4 = x3 + col3W;
 
                                     // Item Name (Left aligned)
-                                    g.DrawString(name, fontItem, brush, x1, currentY);
+                                    TextRenderer.DrawText(g, name, fontItem, new Point((int)x1, currentY), Color.Black, TextFormatFlags.NoPadding);
 
                                     // QTY (Right aligned)
                                     if (!string.IsNullOrEmpty(q))
                                     {
-                                        SizeF sizeQ = g.MeasureString(q, fontQ);
-                                        g.DrawString(q, fontQ, brush, x2 + col2W - sizeQ.Width, currentY);
+                                        Size sizeQ = TextRenderer.MeasureText(g, q, fontQ, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                                        TextRenderer.DrawText(g, q, fontQ, new Point((int)(x2 + col2W - sizeQ.Width), currentY), Color.Black, TextFormatFlags.NoPadding);
                                     }
 
                                     // PRICE (Right aligned)
                                     if (!string.IsNullOrEmpty(p))
                                     {
-                                        SizeF sizeP = g.MeasureString(p, fontP);
-                                        g.DrawString(p, fontP, brush, x3 + col3W - sizeP.Width, currentY);
+                                        Size sizeP = TextRenderer.MeasureText(g, p, fontP, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                                        TextRenderer.DrawText(g, p, fontP, new Point((int)(x3 + col3W - sizeP.Width), currentY), Color.Black, TextFormatFlags.NoPadding);
                                     }
 
                                     // AMOUNT (Right aligned)
                                     if (!string.IsNullOrEmpty(amt))
                                     {
-                                        SizeF sizeA = g.MeasureString(amt, fontA);
-                                        g.DrawString(amt, fontA, brush, x4 + col4W - sizeA.Width, currentY);
+                                        Size sizeA = TextRenderer.MeasureText(g, amt, fontA, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                                        TextRenderer.DrawText(g, amt, fontA, new Point((int)(x4 + col4W - sizeA.Width), currentY), Color.Black, TextFormatFlags.NoPadding);
                                     }
                                 }
 
@@ -227,13 +228,13 @@ public class Program
                                 using (Font fontL = new Font(fontFL, fSize, fStyle))
                                 using (Font fontR = new Font(fontFR, fSize, fStyle))
                                 {
-                                    g.DrawString(leftText, fontL, brush, padding, currentY);
+                                    TextRenderer.DrawText(g, leftText, fontL, new Point(padding, currentY), Color.Black, TextFormatFlags.NoPadding);
 
                                     if (!string.IsNullOrEmpty(rightText))
                                     {
-                                        SizeF sizeR = g.MeasureString(rightText, fontR);
-                                        float rx = width - padding - sizeR.Width;
-                                        g.DrawString(rightText, fontR, brush, rx, currentY);
+                                        Size sizeR = TextRenderer.MeasureText(g, rightText, fontR, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                                        int rx = width - padding - sizeR.Width;
+                                        TextRenderer.DrawText(g, rightText, fontR, new Point(rx, currentY), Color.Black, TextFormatFlags.NoPadding);
                                     }
                                 }
 
@@ -292,18 +293,18 @@ public class Program
 
                                 using (Font font = new Font(fontFamily, fSize, style))
                                 {
-                                    float tx = padding;
+                                    int tx = padding;
                                     if (item.is_center)
                                     {
-                                        SizeF sizeT = g.MeasureString(item.text ?? "", font);
-                                        tx = Math.Max(padding, (int)((width - sizeT.Width) / 2));
+                                        Size sizeT = TextRenderer.MeasureText(g, item.text ?? "", font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                                        tx = Math.Max(padding, (width - sizeT.Width) / 2);
                                     }
                                     else if (item.is_indented)
                                     {
                                         tx = padding + 24;
                                     }
 
-                                    g.DrawString(item.text ?? "", font, brush, tx, currentY);
+                                    TextRenderer.DrawText(g, item.text ?? "", font, new Point(tx, currentY), Color.Black, TextFormatFlags.NoPadding);
                                     currentY += (fSize + 16);
                                 }
                             }
