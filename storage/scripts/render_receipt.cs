@@ -93,7 +93,7 @@ public class Program
             using (Graphics g = Graphics.FromImage(bmp))
             {
                 g.Clear(Color.White);
-                g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
                 using (Brush brush = new SolidBrush(Color.Black))
                 using (Pen pen = new Pen(Color.Black, 2))
@@ -157,13 +157,19 @@ public class Program
                                 string amt = item.amount ?? item.right ?? "";
 
                                 bool nameHasUnicode = Regex.IsMatch(name, @"[\u1000-\u109F]");
+                                bool qHasUnicode = Regex.IsMatch(q, @"[\u1000-\u109F]");
+                                bool pHasUnicode = Regex.IsMatch(p, @"[\u1000-\u109F]");
+                                bool amtHasUnicode = Regex.IsMatch(amt, @"[\u1000-\u109F]");
+
                                 string fontF = nameHasUnicode ? fontFamilyMyanmar : fontFamilyLatin;
                                 FontStyle fStyle = item.is_bold ? FontStyle.Bold : FontStyle.Regular;
 
                                 int fSize = item.font_size > 0 ? item.font_size : 17;
 
                                 using (Font fontItem = new Font(fontF, fSize, fStyle))
-                                using (Font fontNum = new Font(fontFamilyLatin, fSize, fStyle))
+                                using (Font fontQ = new Font(qHasUnicode ? fontFamilyMyanmar : fontFamilyLatin, fSize, fStyle))
+                                using (Font fontP = new Font(pHasUnicode ? fontFamilyMyanmar : fontFamilyLatin, fSize, fStyle))
+                                using (Font fontA = new Font(amtHasUnicode ? fontFamilyMyanmar : fontFamilyLatin, fSize, fStyle))
                                 {
                                     float col1W = is58mm ? 140 : 220;
                                     float col2W = is58mm ? 45 : 65;
@@ -181,22 +187,22 @@ public class Program
                                     // QTY (Right aligned)
                                     if (!string.IsNullOrEmpty(q))
                                     {
-                                        SizeF sizeQ = g.MeasureString(q, fontNum);
-                                        g.DrawString(q, fontNum, brush, x2 + col2W - sizeQ.Width, currentY);
+                                        SizeF sizeQ = g.MeasureString(q, fontQ);
+                                        g.DrawString(q, fontQ, brush, x2 + col2W - sizeQ.Width, currentY);
                                     }
 
                                     // PRICE (Right aligned)
                                     if (!string.IsNullOrEmpty(p))
                                     {
-                                        SizeF sizeP = g.MeasureString(p, fontNum);
-                                        g.DrawString(p, fontNum, brush, x3 + col3W - sizeP.Width, currentY);
+                                        SizeF sizeP = g.MeasureString(p, fontP);
+                                        g.DrawString(p, fontP, brush, x3 + col3W - sizeP.Width, currentY);
                                     }
 
                                     // AMOUNT (Right aligned)
                                     if (!string.IsNullOrEmpty(amt))
                                     {
-                                        SizeF sizeA = g.MeasureString(amt, fontNum);
-                                        g.DrawString(amt, fontNum, brush, x4 + col4W - sizeA.Width, currentY);
+                                        SizeF sizeA = g.MeasureString(amt, fontA);
+                                        g.DrawString(amt, fontA, brush, x4 + col4W - sizeA.Width, currentY);
                                     }
                                 }
 
@@ -210,12 +216,16 @@ public class Program
                                 string rightText = item.right ?? "";
 
                                 bool leftHasUnicode = Regex.IsMatch(leftText, @"[\u1000-\u109F]");
-                                string fontF = leftHasUnicode ? fontFamilyMyanmar : fontFamilyLatin;
+                                bool rightHasUnicode = Regex.IsMatch(rightText, @"[\u1000-\u109F]");
+
+                                string fontFL = leftHasUnicode ? fontFamilyMyanmar : fontFamilyLatin;
+                                string fontFR = rightHasUnicode ? fontFamilyMyanmar : fontFamilyLatin;
+
                                 FontStyle fStyle = item.is_bold ? FontStyle.Bold : FontStyle.Regular;
                                 int fSize = item.font_size > 0 ? item.font_size : 17;
 
-                                using (Font fontL = new Font(fontF, fSize, fStyle))
-                                using (Font fontR = new Font(fontFamilyLatin, fSize, fStyle))
+                                using (Font fontL = new Font(fontFL, fSize, fStyle))
+                                using (Font fontR = new Font(fontFR, fSize, fStyle))
                                 {
                                     g.DrawString(leftText, fontL, brush, padding, currentY);
 
@@ -305,7 +315,14 @@ public class Program
 
                 if (args.Length > 1)
                 {
-                    File.WriteAllBytes(args[1], escPosBytes);
+                    if (args[1].EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                    {
+                        bmp.Save(args[1], ImageFormat.Png);
+                    }
+                    else
+                    {
+                        File.WriteAllBytes(args[1], escPosBytes);
+                    }
                 }
                 else
                 {

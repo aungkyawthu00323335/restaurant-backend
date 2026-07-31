@@ -103,7 +103,7 @@ class EscPosPrintService
             }
 
             // 2. Check 4-Column Item Rows: Item Name, Qty, Price, Amount
-            if (preg_match('/^(.+?)(\t|\s{2,})([0-9\.]+)(\t|\s{2,})([0-9,]+)(\t|\s{2,})([0-9,]+)$/u', $cleanText, $m4)) {
+            if (preg_match('/^(.+?)(\t|\s{2,})([+\-]?\d+(?:\.\d+)?|QTY)(\t|\s{2,})([+\-]?[0-9,\.]+)(\t|\s{2,})([+\-]?[0-9,\.]+)$/u', $cleanText, $m4)) {
                 $linesData[] = [
                     'type' => 'receipt_row',
                     'item_name' => trim($m4[1]),
@@ -116,7 +116,7 @@ class EscPosPrintService
             }
 
             // 3. Check Metadata Rows (Key : Value alignment)
-            if (preg_match('/^(Order No|Order|Type|Table|Waiter|Cashier|Guest|Customer|Pax|Staff|Time|Invoice|Partner|Pickup|Address)\s*:\s*(.+)$/ui', $cleanText, $mMeta)) {
+            if (preg_match('/^(Order No|Order|Type|Table|Waiter|Cashier|Guest|Customer|Pax|Staff|Time|Date|Invoice|Partner|Pickup|Address)\s*:\s*(.+)$/ui', $cleanText, $mMeta)) {
                 $linesData[] = [
                     'type' => 'meta_row',
                     'left' => trim($mMeta[1]),
@@ -126,7 +126,7 @@ class EscPosPrintService
             }
 
             // 4. Check Totals & Summary Breakdown Rows (Subtotal, Discount, Service Charge, Tax, TOTAL AMOUNT, Cash, Change, etc.)
-            if (preg_match('/^(Subtotal|TOTAL AMOUNT|Discount.*|Tax.*|Commercial Tax.*|Service Charge.*|Service.*|Change.*|Balance.*|Paid.*|Cash.*|Payment.*|[A-Za-z0-9\s%\(\)]+):\s*([+\-]?[0-9,]+(?:\.[0-9]+)?(?:\s*MMK)?)$/ui', $cleanText, $mTot)) {
+            if (preg_match('/^(Subtotal|TOTAL AMOUNT|TOTAL|Discount.*|Tax.*|Commercial Tax.*|Service Charge.*|Service.*|Change.*|Balance.*|Paid.*|Cash.*|Payment.*|[\p{L}\p{N}\s%\(\)\-]+):\s*(.+)$/ui', $cleanText, $mTot)) {
                 $label = trim($mTot[1]).':';
                 $val = trim($mTot[2]);
                 $isGrandTotal = str_contains(strtoupper($label), 'TOTAL');

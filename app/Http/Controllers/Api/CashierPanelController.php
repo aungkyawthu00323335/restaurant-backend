@@ -1181,8 +1181,11 @@ class CashierPanelController extends Controller
             $text .= $this->formatSummaryLine($taxLabel, number_format((float) $order->tax_amount, 0), $w);
         }
 
+        $majorCurrency = \App\Models\Currency::where('is_major', true)->first();
+        $currencySymbol = $majorCurrency?->symbol ?? 'Ks';
+
         $text .= $sep;
-        $text .= $this->formatSummaryLine('TOTAL AMOUNT:', number_format((float) $order->grand_total, 0).' MMK', $w);
+        $text .= $this->formatSummaryLine('TOTAL AMOUNT:', number_format((float) $order->grand_total, 0).' '.$currencySymbol, $w);
         $text .= $sep;
 
         $text .= str_pad('Thank you for dining with us!', $w, ' ', STR_PAD_BOTH)."\n";
@@ -1271,8 +1274,11 @@ class CashierPanelController extends Controller
             $text .= $this->formatSummaryLine($taxLabel, number_format((float) $order->tax_amount, 0), $w);
         }
 
+        $majorCurrency = \App\Models\Currency::where('is_major', true)->first();
+        $currencySymbol = $majorCurrency?->symbol ?? 'Ks';
+
         $text .= $sep;
-        $text .= $this->formatSummaryLine('TOTAL AMOUNT:', number_format((float) $order->grand_total, 0).' MMK', $w);
+        $text .= $this->formatSummaryLine('TOTAL AMOUNT:', number_format((float) $order->grand_total, 0).' '.$currencySymbol, $w);
         $text .= $sep;
 
         $text .= "PAYMENT BREAKDOWN:\n";
