@@ -1488,21 +1488,12 @@ class CashierPanelController extends Controller
             return '';
         }
 
-        $parsedPath = parse_url($logoUrl, PHP_URL_PATH);
-        if ($parsedPath) {
-            $relativePath = ltrim($parsedPath, '/');
-            $publicPath = public_path($relativePath);
-            if (file_exists($publicPath)) {
-                return $publicPath;
-            }
-
-            $storagePath = storage_path('app/public/' . str_replace('storage/', '', $relativePath));
-            if (file_exists($storagePath)) {
-                return $storagePath;
-            }
+        $logoUrl = trim($logoUrl);
+        if (filter_var($logoUrl, FILTER_VALIDATE_URL)) {
+            return $logoUrl;
         }
 
-        return $logoUrl;
+        return asset(ltrim($logoUrl, '/'));
     }
 
     private function formatSummaryLine(string $label, string $value, int $w = 44): string
