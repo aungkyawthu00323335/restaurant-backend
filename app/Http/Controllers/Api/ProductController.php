@@ -160,6 +160,7 @@ class ProductController extends Controller
                     'code' => $payload['code'],
                     'barcode' => $payload['barcode'] ?? null,
                     'product_category_id' => (int) $payload['product_category_id'],
+                    'printer_id' => isset($payload['printer_id']) ? (int) $payload['printer_id'] : null,
                     'product_unit_id' => (int) $payload['product_unit_id'],
                     'purchase_price_per_unit' => (float) ($payload['purchase_price_per_unit'] ?? 0),
                     'sell_price_per_unit' => (float) ($payload['sell_price_per_unit'] ?? 0),
@@ -268,6 +269,9 @@ class ProductController extends Controller
                     'code' => $payload['code'],
                     'barcode' => $payload['barcode'] ?? null,
                     'product_category_id' => (int) $payload['product_category_id'],
+                    'printer_id' => array_key_exists('printer_id', $payload)
+                        ? ($payload['printer_id'] !== null ? (int) $payload['printer_id'] : null)
+                        : $product->printer_id,
                     'product_unit_id' => (int) $payload['product_unit_id'],
                     'purchase_price_per_unit' => (float) ($payload['purchase_price_per_unit'] ?? 0),
                     'sell_price_per_unit' => (float) ($payload['sell_price_per_unit'] ?? 0),
