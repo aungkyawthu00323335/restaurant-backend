@@ -422,10 +422,6 @@ class ComboMenuController extends Controller
     private function detailResource(ComboMenu $combo): array
     {
         $data = $combo->attributesToArray();
-        $imageUrl = $data['image_url'] ?? null;
-        if (is_string($imageUrl) && $imageUrl !== '' && ! Str::startsWith($imageUrl, ['http://', 'https://'])) {
-            $data['image_url'] = rtrim((string) config('app.url'), '/') . '/' . ltrim($imageUrl, '/');
-        }
 
         $data['category_name'] = $combo->category?->name;
         $data['created_by_name'] = $combo->createdBy?->name;

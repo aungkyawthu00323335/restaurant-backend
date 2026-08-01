@@ -261,10 +261,6 @@ class FoodMenuController extends Controller
     private function resource(FoodMenu $foodMenu, ?int $locationId = null): array
     {
         $data = $foodMenu->attributesToArray();
-        $imageUrl = $data['image_url'] ?? null;
-        if (is_string($imageUrl) && $imageUrl !== '' && ! Str::startsWith($imageUrl, ['http://', 'https://'])) {
-            $data['image_url'] = rtrim((string) config('app.url'), '/').'/'.ltrim($imageUrl, '/');
-        }
 
         $data['category_name'] = $foodMenu->category?->name;
         $data['printer_name'] = $foodMenu->printer?->name;
