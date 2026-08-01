@@ -584,7 +584,10 @@ class CashierPanelController extends Controller
                 $this->createSaleWithDetails($order, $order->outlet_id, $user?->id, $allPayments, $register->id);
             }
 
+            $firstPaymentMethodId = $validated['payments'][0]['payment_method_id'] ?? $order->payment_method_id;
+
             $order->update([
+                'payment_method_id' => $firstPaymentMethodId,
                 'paid_amount' => $calcPaid,
                 'balance_amount' => $balanceAmount,
                 'change_amount' => $changeAmount,
@@ -637,10 +640,11 @@ class CashierPanelController extends Controller
     public function printCheck(Request $request, int $id): JsonResponse
     {
         $order = Order::query()
-            ->with(['items.modifiers', 'floor:id,name', 'table:id,table_no', 'outlet:id,name,address,phone,image_url', 'createdBy:id,name'])
+            ->with(['items.modifiers', 'payments.paymentMethod:id,name', 'floor:id,name', 'table:id,table_no', 'outlet:id,name,address,phone,image_url', 'createdBy:id,name'])
             ->findOrFail($id);
 
-        $checkText = $this->buildCheckText($order);
+        $customPayments = $request->input('payments');
+        $checkText = $this->buildCheckText($order, is_array($customPayments) ? $customPayments : null);
         if ($request->boolean('direct_print', false)) {
             $this->sendDocumentToPrinter($order, $checkText, 'check', false, $request->input('printer_id'));
         }
@@ -657,7 +661,8 @@ class CashierPanelController extends Controller
             ->with(['items.modifiers', 'payments.paymentMethod:id,name', 'floor:id,name', 'table:id,table_no', 'outlet:id,name,address,phone,image_url', 'createdBy:id,name', 'sale.createdBy:id,name'])
             ->findOrFail($id);
 
-        $billText = $this->buildBillText($order);
+        $customPayments = $request->input('payments');
+        $billText = $this->buildBillText($order, is_array($customPayments) ? $customPayments : null);
         $isReprint = $request->boolean('is_reprint', false);
         if ($request->boolean('direct_print', false)) {
             $this->sendDocumentToPrinter($order, $billText, 'bill', $isReprint, $request->input('printer_id'));
@@ -1142,7 +1147,7 @@ class CashierPanelController extends Controller
         }
     }
 
-    private function buildCheckText(Order $order): string
+    private function buildCheckText(Order $order, ?array $customPayments = null): string
     {
         $w = 44;
         $sep = str_repeat('=', $w)."\n";
@@ -1214,12 +1219,33 @@ class CashierPanelController extends Controller
         $text .= $this->formatSummaryLine('TOTAL AMOUNT:', number_format((float) $order->grand_total, 0).' '.$currencySymbol, $w);
         $text .= $sep;
 
+        if (!empty($customPayments) && is_array($customPayments)) {
+            $text .= "PAYMENT BREAKDOWN:\n";
+            $pmIds = collect($customPayments)->pluck('payment_method_id')->filter()->unique();
+            $pmNames = \App\Models\PaymentMethod::whereIn('id', $pmIds)->pluck('name', 'id');
+            foreach ($customPayments as $p) {
+                $amt = (float) ($p['amount'] ?? 0);
+                if ($amt > 0) {
+                    $pmName = $pmNames->get($p['payment_method_id']) ?? 'Payment';
+                    $text .= $this->formatSummaryLine("  {$pmName}:", number_format($amt, 0), $w);
+                }
+            }
+            $text .= $sep;
+        } elseif ($order->payments && $order->payments->isNotEmpty()) {
+            $text .= "PAYMENT BREAKDOWN:\n";
+            foreach ($order->payments as $payment) {
+                $pmName = $payment->paymentMethod?->name ?? 'Payment';
+                $text .= $this->formatSummaryLine("  {$pmName}:", number_format((float) $payment->amount, 0), $w);
+            }
+            $text .= $sep;
+        }
+
         $text .= str_pad('Thank you for dining with us!', $w, ' ', STR_PAD_BOTH)."\n";
         $text .= str_pad('Please visit again!', $w, ' ', STR_PAD_BOTH)."\n";
         return $text;
     }
 
-    private function buildBillText(Order $order): string
+    private function buildBillText(Order $order, ?array $customPayments = null): string
     {
         $w = 44;
         $sep = str_repeat('=', $w)."\n";
@@ -1303,9 +1329,28 @@ class CashierPanelController extends Controller
         $text .= $sep;
 
         $text .= "PAYMENT BREAKDOWN:\n";
-        foreach ($order->payments as $payment) {
-            $pmName = $payment->paymentMethod?->name ?? 'Payment';
-            $text .= $this->formatSummaryLine("  {$pmName}:", number_format((float) $payment->amount, 0), $w);
+        if (!empty($customPayments) && is_array($customPayments)) {
+            $pmIds = collect($customPayments)->pluck('payment_method_id')->filter()->unique();
+            $pmNames = \App\Models\PaymentMethod::whereIn('id', $pmIds)->pluck('name', 'id');
+            foreach ($customPayments as $p) {
+                $amt = (float) ($p['amount'] ?? 0);
+                if ($amt > 0) {
+                    $pmName = $pmNames->get($p['payment_method_id']) ?? 'Payment';
+                    $text .= $this->formatSummaryLine("  {$pmName}:", number_format($amt, 0), $w);
+                }
+            }
+        } else {
+            foreach ($order->payments as $payment) {
+                $pmName = $payment->paymentMethod?->name ?? 'Payment';
+                $text .= $this->formatSummaryLine("  {$pmName}:", number_format((float) $payment->amount, 0), $w);
+            }
+        }
+
+        if ((float) $order->change_amount > 0) {
+            $text .= $this->formatSummaryLine('  Change:', number_format((float) $order->change_amount, 0), $w);
+        }
+        if ((float) $order->balance_amount > 0) {
+            $text .= $this->formatSummaryLine('  Balance Due:', number_format((float) $order->balance_amount, 0), $w);
         }
         if ((float) $order->change_amount > 0) {
             $text .= $this->formatSummaryLine('  Change:', number_format((float) $order->change_amount, 0), $w);
