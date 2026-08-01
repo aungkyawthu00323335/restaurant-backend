@@ -156,6 +156,8 @@ class PurchaseReportController extends Controller
             });
         }
 
+        $this->enforceExportLimit($query);
+
         return $query->orderByDesc('id')->get();
     }
 

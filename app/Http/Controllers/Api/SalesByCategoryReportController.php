@@ -124,7 +124,7 @@ class SalesByCategoryReportController extends Controller
         }
 
         $page = (int)($request->page ?? 1);
-        $perPage = (int)($payload['per_page'] ?? 15);
+        $perPage = $this->reportPageSize($request);
         $offset = ($page - 1) * $perPage;
         
         $paginated = array_slice($formatted, $offset, $perPage);
@@ -152,7 +152,7 @@ class SalesByCategoryReportController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $data = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -201,7 +201,7 @@ class SalesByCategoryReportController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $rows = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];

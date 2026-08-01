@@ -20,10 +20,31 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class AdminDashboardController extends Controller
 {
     public function index(Request $request): JsonResponse
+    {
+        $userKey = $request->user()?->id ?? 'guest';
+        $scopeKey = sha1(implode('|', [
+            (string) $request->getQueryString(),
+            (string) $request->header('X-Outlet-Id', ''),
+        ]));
+        $cacheKey = "pos.dashboard.{$userKey}.{$scopeKey}";
+
+        // Dashboard metrics are live database data. A short scoped cache keeps
+        // repeated mobile refreshes from rerunning every aggregate query.
+        $payload = Cache::remember(
+            $cacheKey,
+            now()->addSeconds((int) config('pos.dashboard_cache_seconds', 10)),
+            fn (): array => $this->buildDashboardData($request),
+        );
+
+        return response()->json($payload);
+    }
+
+    private function buildDashboardData(Request $request): array
     {
         $dateFrom = $request->date_from ? Carbon::parse($request->date_from)->startOfDay() : null;
         $dateTo   = $request->date_to   ? Carbon::parse($request->date_to)->endOfDay()     : null;
@@ -58,9 +79,16 @@ class AdminDashboardController extends Controller
             ->sum('grand_total');
 
         // ─── Expenses ──────────────────────────────────────────────────────────
-        $expensesQuery = Expense::query();
-        if ($dateFrom)  $expensesQuery->where('date', '>=', $dateFrom->toDateString());
-        if ($dateTo)    $expensesQuery->where('date', '<=', $dateTo->toDateString());
+        $expensesQuery = DB::table('expenses')->whereNull('deleted_at');
+        if ($dateFrom && $dateTo) {
+            $expensesQuery
+                ->where('date', '>=', $dateFrom->toDateString())
+                ->where('date', '<', $dateTo->copy()->addDay()->toDateString());
+        } elseif ($dateFrom) {
+            $expensesQuery->where('date', '>=', $dateFrom->toDateString());
+        } elseif ($dateTo) {
+            $expensesQuery->where('date', '<', $dateTo->copy()->addDay()->toDateString());
+        }
         if ($outletId)  $expensesQuery->where('outlet_id', $outletId);
 
         $totalExpense = (float) (clone $expensesQuery)->sum('amount');
@@ -95,7 +123,9 @@ class AdminDashboardController extends Controller
             ->when($outletId, fn ($q) => $q->where('location_id', $outletId))
             ->sum('grand_total');
         $todayTotalExpense = (float) Expense::query()
-            ->whereDate('date', Carbon::today()->toDateString())
+            ->withoutGlobalScopes()
+            ->where('date', '>=', Carbon::today()->toDateString())
+            ->where('date', '<', Carbon::tomorrow()->toDateString())
             ->when($outletId, fn ($q) => $q->where('outlet_id', $outletId))
             ->sum('amount');
 
@@ -150,11 +180,17 @@ class AdminDashboardController extends Controller
         // ─── Monthly Chart Data ───────────────────────────────────────────────────
         $yearStart = $dateFrom ?? Carbon::now()->startOfYear();
         $yearEnd   = $dateTo   ?? Carbon::now()->endOfYear();
+        $monthExpr = DB::getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', %s)"
+            : "DATE_FORMAT(%s, '%Y-%m')";
+        $saleMonth = str_replace('%s', 'sale_at', $monthExpr);
+        $salesMonth = str_replace('%s', 'sales.sale_at', $monthExpr);
+        $purchaseMonth = str_replace('%s', 'purchase_date', $monthExpr);
 
         $monthlySales = Sale::whereIn('status', ['completed', 'refunded'])
             ->whereBetween('sale_at', [$yearStart, $yearEnd])
             ->when($outletId, fn($q) => $q->where('outlet_id', $outletId))
-            ->selectRaw("DATE_FORMAT(sale_at, '%Y-%m') as month, SUM(total_amount) as total")
+            ->selectRaw("{$saleMonth} as month, SUM(total_amount) as total")
             ->groupBy('month')
             ->pluck('total', 'month');
 
@@ -163,14 +199,14 @@ class AdminDashboardController extends Controller
             ->whereIn('sales.status', ['completed', 'refunded'])
             ->whereBetween('sales.sale_at', [$yearStart, $yearEnd])
             ->when($outletId, fn ($q) => $q->where('sales.outlet_id', $outletId))
-            ->selectRaw("DATE_FORMAT(sales.sale_at, '%Y-%m') as month, SUM(refunds.refund_amount) as total")
+            ->selectRaw("{$salesMonth} as month, SUM(refunds.refund_amount) as total")
             ->groupBy('month')
             ->pluck('total', 'month');
 
         $monthlyPurchases = Purchase::whereIn('status', ['pending', 'received'])
             ->whereBetween('purchase_date', [$yearStart, $yearEnd])
             ->when($outletId, fn($q) => $q->where('location_id', $outletId))
-            ->selectRaw("DATE_FORMAT(purchase_date, '%Y-%m') as month, SUM(grand_total) as total")
+            ->selectRaw("{$purchaseMonth} as month, SUM(grand_total) as total")
             ->groupBy('month')
             ->pluck('total', 'month');
 
@@ -178,16 +214,9 @@ class AdminDashboardController extends Controller
             ->whereIn('sales.status', ['completed', 'refunded'])
             ->whereBetween('sales.sale_at', [$yearStart, $yearEnd])
             ->when($outletId, fn($q) => $q->where('sales.outlet_id', $outletId))
-            ->selectRaw("DATE_FORMAT(sales.sale_at, '%Y-%m') as month, SUM(sale_items.qty * sale_items.cost_snapshot) as total_cogs")
+            ->selectRaw("{$salesMonth} as month, SUM(sale_items.qty * sale_items.cost_snapshot) as total_cogs")
             ->groupBy('month')
             ->pluck('total_cogs', 'month');
-
-        $monthlyExpenses = Expense::query()
-            ->whereBetween('date', [$yearStart->toDateString(), $yearEnd->toDateString()])
-            ->when($outletId, fn ($q) => $q->where('outlet_id', $outletId))
-            ->selectRaw("DATE_FORMAT(date, '%Y-%m') as month, SUM(amount) as total")
-            ->groupBy('month')
-            ->pluck('total', 'month');
 
         $chartData    = [];
         $currentMonth = $yearStart->copy()->startOfMonth();
@@ -196,13 +225,20 @@ class AdminDashboardController extends Controller
             $key         = $currentMonth->format('Y-m');
             $monthSales  = max(0, (float) ($monthlySales[$key] ?? 0) - (float) ($monthlyRefunds[$key] ?? 0));
             $monthCogs   = (float) ($monthlyCogs[$key] ?? 0);
+            $monthExpense = (float) Expense::query()
+                ->whereBetween('date', [
+                    $currentMonth->copy()->startOfMonth()->toDateString(),
+                    $currentMonth->copy()->endOfMonth()->toDateString(),
+                ])
+                ->when($outletId, fn ($q) => $q->where('outlet_id', $outletId))
+                ->sum('amount');
             $chartData[] = [
                 'month'      => $currentMonth->format('M'),
                 'year_month' => $key,
                 'sales'      => $monthSales,
                 'purchases'  => (float) ($monthlyPurchases[$key] ?? 0),
                 'profit'     => round($monthSales - $monthCogs, 2),
-                'expense'    => (float) ($monthlyExpenses[$key] ?? 0),
+                'expense'    => $monthExpense,
             ];
             $currentMonth->addMonth();
         }
@@ -227,7 +263,9 @@ class AdminDashboardController extends Controller
             ]);
 
         // ─── Recent Orders (from Order table which has order_status & grand_total) ─
-        $recentOrders = Order::orderBy('created_at', 'desc')
+        $recentOrders = Order::query()
+            ->withCount('items')
+            ->orderBy('created_at', 'desc')
             ->when($outletId, fn ($q) => $q->where('outlet_id', $outletId))
             ->limit(5)
             ->get()
@@ -235,7 +273,7 @@ class AdminDashboardController extends Controller
                 return [
                     'order_id' => '#ORD-' . str_pad($order->id, 3, '0', STR_PAD_LEFT),
                     'customer' => $order->customer_name ?: 'Walk-in',
-                    'items'    => $order->items()->count(),
+                    'items'    => (int) $order->items_count,
                     'total'    => (float) $order->grand_total,
                     'status'   => ucfirst($order->order_status ?? 'pending'),
                     'time'     => $order->created_at->format('h:i A'),
@@ -289,9 +327,21 @@ class AdminDashboardController extends Controller
         $endOfWeek = Carbon::today()->endOfWeek();
 
         $reservationScope = fn () => Reservation::query()->when($outletId, fn ($q) => $q->where('outlet_id', $outletId));
-        $resToday    = $reservationScope()->where('reservation_date', $today->toDateString())->where('status', '!=', 'cancelled')->count();
-        $resTomorrow = $reservationScope()->where('reservation_date', $tomorrow->toDateString())->where('status', '!=', 'cancelled')->count();
-        $resWeek     = $reservationScope()->whereBetween('reservation_date', [$today->toDateString(), $endOfWeek->toDateString()])->where('status', '!=', 'cancelled')->count();
+        $resToday = $reservationScope()
+            ->where('reservation_date', '>=', $today->toDateString())
+            ->where('reservation_date', '<', $tomorrow->toDateString())
+            ->where('status', '!=', 'cancelled')
+            ->count();
+        $resTomorrow = $reservationScope()
+            ->where('reservation_date', '>=', $tomorrow->toDateString())
+            ->where('reservation_date', '<', $tomorrow->copy()->addDay()->toDateString())
+            ->where('status', '!=', 'cancelled')
+            ->count();
+        $resWeek = $reservationScope()
+            ->where('reservation_date', '>=', $today->toDateString())
+            ->where('reservation_date', '<', $endOfWeek->copy()->addDay()->toDateString())
+            ->where('status', '!=', 'cancelled')
+            ->count();
 
         $upcomingList = Reservation::query()
             ->when($outletId, fn ($q) => $q->where('outlet_id', $outletId))
@@ -315,7 +365,7 @@ class AdminDashboardController extends Controller
                 ];
             });
 
-        return response()->json([
+        return [
             'summary'          => $summary,
             'charts'           => $chartData,
             'recent_orders'    => $recentOrders,
@@ -327,6 +377,6 @@ class AdminDashboardController extends Controller
                 'this_week' => $resWeek,
                 'list'      => $upcomingList,
             ],
-        ]);
+        ];
     }
 }

@@ -22,6 +22,9 @@ class CustomerReportController extends Controller
         $refundTotals = DB::table('refunds')
             ->select('sale_id', DB::raw('SUM(refund_amount) as refund_amount'))
             ->groupBy('sale_id');
+        $tipsExpr = DB::getDriverName() === 'sqlite'
+            ? 'max(COALESCE(o.paid_amount, 0) - COALESCE(o.grand_total, 0) - COALESCE(o.change_amount, 0), 0)'
+            : 'GREATEST(COALESCE(o.paid_amount, 0) - COALESCE(o.grand_total, 0) - COALESCE(o.change_amount, 0), 0)';
 
         $query = DB::table('sales as s')
             ->join('orders as o', 's.order_id', '=', 'o.id')
@@ -35,7 +38,7 @@ class CustomerReportController extends Controller
                 SUM(o.grand_total) - SUM(COALESCE(refund_totals.refund_amount, 0)) as net_total,
                 SUM(o.paid_amount) as paid,
                 SUM(o.balance_amount) as due,
-                SUM(GREATEST(COALESCE(o.paid_amount, 0) - COALESCE(o.grand_total, 0) - COALESCE(o.change_amount, 0), 0)) as tips
+                SUM({$tipsExpr}) as tips
             ")
             ->where('s.total_amount', '>', 0)
             ->where('s.status', '!=', 'voided');
@@ -101,7 +104,7 @@ class CustomerReportController extends Controller
         }
 
         $page = (int)($request->page ?? 1);
-        $perPage = (int)($payload['per_page'] ?? 15);
+        $perPage = $this->reportPageSize($request);
         $offset = ($page - 1) * $perPage;
         
         $paginated = array_slice($formatted, $offset, $perPage);
@@ -127,7 +130,7 @@ class CustomerReportController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $data = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -181,7 +184,7 @@ class CustomerReportController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $rows = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];

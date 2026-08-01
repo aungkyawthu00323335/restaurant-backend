@@ -632,6 +632,7 @@ class ProductController extends Controller
     {
         $query = Product::query()->with(['productCategory', 'productUnit', 'stockMovements']);
         $this->applyFilters($query, $request->all());
+        $this->enforceExportLimit($query);
         $products = $query->orderBy('id', 'desc')->get();
 
         $selectedLocationId = $request->filled('location_id') ? (int) $request->input('location_id') : null;
@@ -720,6 +721,7 @@ class ProductController extends Controller
     {
         $query = Product::query()->with(['productCategory', 'productUnit', 'stockMovements']);
         $this->applyFilters($query, $request->all());
+        $this->enforceExportLimit($query);
         $products = $query->orderBy('id', 'desc')->get();
 
         $selectedLocationId = $request->filled('location_id') ? (int) $request->input('location_id') : null;

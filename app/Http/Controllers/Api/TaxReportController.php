@@ -28,11 +28,16 @@ class TaxReportController extends Controller
             'weekly' => '%X-W%V',
             default => '%M %d, %Y',
         };
+        $salePeriodExpr = $this->datePeriodExpression('s.sale_at', $dateFormat);
+        $refundPeriodExpr = $this->datePeriodExpression('r.created_at', $dateFormat);
+        $leastTaxExpr = DB::getDriverName() === 'sqlite'
+            ? 'min(COALESCE(o.tax_amount, 0), COALESCE(r.refund_amount, 0) * (COALESCE(o.tax_amount, 0) / o.grand_total))'
+            : 'LEAST(COALESCE(o.tax_amount, 0), COALESCE(r.refund_amount, 0) * (COALESCE(o.tax_amount, 0) / o.grand_total))';
 
         $query = DB::table('sales as s')
             ->join('orders as o', 's.order_id', '=', 'o.id')
             ->selectRaw("
-                DATE_FORMAT(s.sale_at, '{$dateFormat}') as period,
+                {$salePeriodExpr} as period,
                 COUNT(s.id) as orders_count,
                 SUM(CASE WHEN o.tax_amount > 0 THEN 1 ELSE 0 END) as taxed_orders_count,
                 SUM(CASE WHEN o.tax_amount > 0 THEN (o.subtotal - (o.item_discount_amount + o.order_discount_amount)) ELSE 0 END) as taxable_amount,
@@ -51,7 +56,7 @@ class TaxReportController extends Controller
             $query->whereDate('s.sale_at', '<=', $payload['date_to']);
         }
 
-        $query->groupByRaw("DATE_FORMAT(s.sale_at, '{$dateFormat}')");
+        $query->groupByRaw($salePeriodExpr);
         $query->orderByRaw("MAX(s.sale_at) DESC");
 
         $items = $query->get();
@@ -59,10 +64,10 @@ class TaxReportController extends Controller
             ->join('sales as s', 'r.sale_id', '=', 's.id')
             ->join('orders as o', 's.order_id', '=', 'o.id')
             ->selectRaw("
-                DATE_FORMAT(r.created_at, '{$dateFormat}') as period,
+                {$refundPeriodExpr} as period,
                 SUM(CASE
                     WHEN COALESCE(o.grand_total, 0) > 0
-                    THEN LEAST(COALESCE(o.tax_amount, 0), COALESCE(r.refund_amount, 0) * (COALESCE(o.tax_amount, 0) / o.grand_total))
+                    THEN {$leastTaxExpr}
                     ELSE 0
                 END) as tax_refunded
             ");
@@ -80,7 +85,7 @@ class TaxReportController extends Controller
         }
 
         $taxRefundedByPeriod = $refundQuery
-            ->groupByRaw("DATE_FORMAT(r.created_at, '{$dateFormat}')")
+            ->groupByRaw($refundPeriodExpr)
             ->pluck('tax_refunded', 'period');
 
         $formatted = [];
@@ -125,7 +130,7 @@ class TaxReportController extends Controller
         }
 
         $page = (int)($request->page ?? 1);
-        $perPage = (int)($payload['per_page'] ?? 15);
+        $perPage = $this->reportPageSize($request);
         $offset = ($page - 1) * $perPage;
         
         $paginated = array_slice($formatted, $offset, $perPage);
@@ -151,7 +156,7 @@ class TaxReportController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $data = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -203,7 +208,7 @@ class TaxReportController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $rows = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -236,5 +241,19 @@ class TaxReportController extends Controller
         return response($csv)
             ->header('Content-Type', 'text/csv; charset=UTF-8')
             ->header('Content-Disposition', 'attachment; filename="tax_report.csv"');
+    }
+
+    private function datePeriodExpression(string $column, string $mysqlFormat): string
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            return "DATE_FORMAT({$column}, '{$mysqlFormat}')";
+        }
+
+        return match ($mysqlFormat) {
+            '%Y' => "strftime('%Y', {$column})",
+            '%M %Y' => "strftime('%Y-%m', {$column})",
+            '%X-W%V' => "strftime('%Y-W%W', {$column})",
+            default => "strftime('%Y-%m-%d', {$column})",
+        };
     }
 }

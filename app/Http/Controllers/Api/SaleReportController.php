@@ -29,6 +29,10 @@ class SaleReportController extends Controller
             'weekly' => '%X-W%V',
             default => '%M %d, %Y',
         };
+        $periodExpr = $this->datePeriodExpression('sales.sale_at', $dateFormat);
+        $tipsExpr = DB::getDriverName() === 'sqlite'
+            ? 'max(COALESCE(orders.paid_amount, 0) - COALESCE(orders.grand_total, 0) - COALESCE(orders.change_amount, 0), 0)'
+            : 'GREATEST(COALESCE(orders.paid_amount, 0) - COALESCE(orders.grand_total, 0) - COALESCE(orders.change_amount, 0), 0)';
 
         $refundTotals = DB::table('refunds')
             ->select('sale_id', DB::raw('SUM(refund_amount) as refund_amount'))
@@ -40,13 +44,13 @@ class SaleReportController extends Controller
                 $join->on('sales.id', '=', 'refund_totals.sale_id');
             })
             ->selectRaw("
-                DATE_FORMAT(sales.sale_at, '{$dateFormat}') as period,
+                {$periodExpr} as period,
                 COUNT(sales.id) as orders_count,
                 SUM(orders.subtotal) as sub_total,
                 SUM(COALESCE(orders.item_discount_amount, 0) + COALESCE(orders.order_discount_amount, 0)) as discounts,
                 SUM(COALESCE(orders.tax_amount, 0)) as tax,
                 SUM(COALESCE(orders.service_charge_amount, 0)) as charges,
-                SUM(GREATEST(COALESCE(orders.paid_amount, 0) - COALESCE(orders.grand_total, 0) - COALESCE(orders.change_amount, 0), 0)) as tips,
+                SUM({$tipsExpr}) as tips,
                 SUM(COALESCE(orders.delivery_fee, 0)) as fees,
                 SUM(COALESCE(refund_totals.refund_amount, 0)) as returns_amount,
                 SUM(sales.total_cost) as cost
@@ -68,7 +72,7 @@ class SaleReportController extends Controller
         // We can't search aggregate results easily before group by, but we could filter by period string having.
         // For simplicity we will search after getting results.
 
-        $query->groupByRaw("DATE_FORMAT(sales.sale_at, '{$dateFormat}')");
+        $query->groupByRaw($periodExpr);
         // Order by date descending by default (we can't just order by the formatted string, we order by MAX sale_at)
         $query->orderByRaw("MAX(sales.sale_at) DESC");
 
@@ -131,7 +135,7 @@ class SaleReportController extends Controller
         }
 
         $page = (int)($request->page ?? 1);
-        $perPage = (int)($payload['per_page'] ?? 15);
+        $perPage = $this->reportPageSize($request);
         $offset = ($page - 1) * $perPage;
         
         $paginated = array_slice($formatted, $offset, $perPage);
@@ -163,7 +167,7 @@ class SaleReportController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $data = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -213,7 +217,7 @@ class SaleReportController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $rows = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -236,5 +240,19 @@ class SaleReportController extends Controller
         return response($csv)
             ->header('Content-Type', 'text/csv; charset=UTF-8')
             ->header('Content-Disposition', 'attachment; filename="sales_report.csv"');
+    }
+
+    private function datePeriodExpression(string $column, string $mysqlFormat): string
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            return "DATE_FORMAT({$column}, '{$mysqlFormat}')";
+        }
+
+        return match ($mysqlFormat) {
+            '%Y' => "strftime('%Y', {$column})",
+            '%M %Y' => "strftime('%Y-%m', {$column})",
+            '%X-W%V' => "strftime('%Y-W%W', {$column})",
+            default => "strftime('%Y-%m-%d', {$column})",
+        };
     }
 }

@@ -17,7 +17,15 @@ class EnsurePosApiToken
         $expectedToken = (string) config('pos.api_token', '');
 
         if ($expectedToken === '') {
-            return $this->secure($next($request), $requestId);
+            if (app()->environment(['local', 'testing'])) {
+                return $this->secure($next($request), $requestId);
+            }
+
+            $response = new JsonResponse([
+                'message' => 'POS API token is not configured.',
+            ], Response::HTTP_SERVICE_UNAVAILABLE);
+            $response->headers->set('X-Request-Id', $requestId);
+            return $this->secure($response, $requestId);
         }
 
         $providedToken = $request->bearerToken()

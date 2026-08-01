@@ -15,7 +15,7 @@ class ExpenseController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 10);
+        $perPage = $this->boundedPageSize($request, 10);
         $search = $request->input('search');
         $categoryId = $request->input('category_id');
         $outletId = $request->input('outlet_id');

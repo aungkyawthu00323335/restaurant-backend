@@ -53,6 +53,11 @@ Route::prefix('v1')
         // Public Auth login endpoint
         Route::post('auth/login', [AuthController::class, 'login']);
 
+        // Delivery providers authenticate with their HMAC signature rather
+        // than an interactive POS user session.
+        Route::post('webhooks/delivery/{provider}', [\App\Http\Controllers\Api\DeliveryWebhookController::class, 'handleWebhook']);
+        Route::post('webhooks/delivery/{provider}/sync-menu', [\App\Http\Controllers\Api\DeliveryWebhookController::class, 'syncMenu']);
+
         // Protected session routes
         Route::middleware(['user.auth', 'outlet.context', 'outlet.access', 'permission'])->group(function (): void {
             Route::get('auth/me', [AuthController::class, 'me']);
@@ -317,11 +322,7 @@ Route::prefix('v1')
             Route::post('cashier-panel/sales/{id}/refund', [CashierPanelController::class, 'refundSale']);
 
             // Sprint 5 Advanced Enterprise Routes
-            // 1. Third-Party Delivery Webhooks
-            Route::post('webhooks/delivery/{provider}', [\App\Http\Controllers\Api\DeliveryWebhookController::class, 'handleWebhook']);
-            Route::post('webhooks/delivery/{provider}/sync-menu', [\App\Http\Controllers\Api\DeliveryWebhookController::class, 'syncMenu']);
-
-            // 2. Kitchen Display System (KDS)
+            // Kitchen Display System (KDS)
             Route::get('kds/tickets', [\App\Http\Controllers\Api\KDSController::class, 'getTickets']);
             Route::patch('kds/tickets/{id}/status', [\App\Http\Controllers\Api\KDSController::class, 'updateTicketStatus']);
             Route::post('kds/tickets/{id}/bump', [\App\Http\Controllers\Api\KDSController::class, 'bumpTicket']);

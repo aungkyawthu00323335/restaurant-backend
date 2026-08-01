@@ -22,6 +22,9 @@ class SalesByPaymentMethodReportController extends Controller
         $paymentTotals = DB::table('sale_payments')
             ->select('sale_id', DB::raw('SUM(amount) as total_paid'))
             ->groupBy('sale_id');
+        $tipsExpr = DB::getDriverName() === 'sqlite'
+            ? 'max(COALESCE(payment_totals.total_paid, 0) - COALESCE(s.total_amount, 0) - COALESCE(o.change_amount, 0), 0)'
+            : 'GREATEST(COALESCE(payment_totals.total_paid, 0) - COALESCE(s.total_amount, 0) - COALESCE(o.change_amount, 0), 0)';
 
         // Aggregate Payments
         $paymentsQuery = DB::table('sale_payments as sp')
@@ -35,7 +38,7 @@ class SalesByPaymentMethodReportController extends Controller
                 COALESCE(pm.name, sp.payment_method_name_snapshot, 'Unknown') as method_name,
                 COUNT(sp.id) as transactions_count,
                 SUM(CASE WHEN COALESCE(payment_totals.total_paid, 0) > 0 THEN (sp.amount / payment_totals.total_paid) * s.total_amount ELSE sp.amount END) as amount,
-                SUM(CASE WHEN COALESCE(payment_totals.total_paid, 0) > 0 THEN (sp.amount / payment_totals.total_paid) * GREATEST(COALESCE(payment_totals.total_paid, 0) - COALESCE(s.total_amount, 0) - COALESCE(o.change_amount, 0), 0) ELSE 0 END) as tips
+                SUM(CASE WHEN COALESCE(payment_totals.total_paid, 0) > 0 THEN (sp.amount / payment_totals.total_paid) * {$tipsExpr} ELSE 0 END) as tips
             ")
             ->where('s.status', '!=', 'voided');
 
@@ -128,7 +131,7 @@ class SalesByPaymentMethodReportController extends Controller
         }
 
         $page = (int)($request->page ?? 1);
-        $perPage = (int)($payload['per_page'] ?? 15);
+        $perPage = $this->reportPageSize($request);
         $offset = ($page - 1) * $perPage;
         
         $paginated = array_slice($formatted, $offset, $perPage);
@@ -154,7 +157,7 @@ class SalesByPaymentMethodReportController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $data = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -203,7 +206,7 @@ class SalesByPaymentMethodReportController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $rows = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];

@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'delivery' => [
+        'partners' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('DELIVERY_PARTNERS', 'Own Delivery,Food panda,Grab,Other')),
+        ))),
+        'grabfood' => ['secret' => env('DELIVERY_GRABFOOD_SECRET')],
+        'ubereats' => ['secret' => env('DELIVERY_UBEREATS_SECRET')],
+        'foodpanda' => ['secret' => env('DELIVERY_FOODPANDA_SECRET')],
+    ],
+
 ];

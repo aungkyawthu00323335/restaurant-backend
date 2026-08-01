@@ -265,6 +265,60 @@ class CashierPanelTest extends TestCase
         $this->assertEquals('available', $table->status);
     }
 
+    public function test_partial_payment_does_not_create_sale_or_deduct_stock(): void
+    {
+        $this->actingAs($this->cashier);
+
+        $register = CashRegister::query()->create([
+            'outlet_id' => $this->location->id,
+            'cashier_id' => $this->cashier->id,
+            'cashier_name_snapshot' => $this->cashier->name,
+            'opened_at' => now(),
+            'opening_balance' => 0,
+            'status' => 'open',
+        ]);
+
+        $order = Order::query()->create([
+            'order_no' => 'ORD-PARTIAL-001',
+            'outlet_id' => $this->location->id,
+            'order_type' => 'takeaway',
+            'order_status' => 'pending',
+            'payment_state' => 'unpaid',
+            'stock_deduction_status' => 'none',
+            'subtotal' => 10000,
+            'grand_total' => 10000,
+        ]);
+
+        OrderItem::query()->create([
+            'order_id' => $order->id,
+            'item_type' => 'food_menu',
+            'item_id' => 1,
+            'item_name_snapshot' => 'Fried Rice',
+            'unit_name_snapshot' => 'Portion',
+            'base_unit_price_snapshot' => 10000,
+            'final_unit_price' => 10000,
+            'qty' => 1,
+            'amount' => 10000,
+        ]);
+
+        $response = $this->postJson("/api/v1/cashier-panel/orders/{$order->id}/complete-payment", [
+            'payments' => [
+                ['payment_method_id' => $this->cashMethod->id, 'amount' => 4000],
+            ],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('order.order_status', 'confirmed')
+            ->assertJsonPath('order.payment_state', 'partially_paid')
+            ->assertJsonPath('order.paid_amount', '4000.00')
+            ->assertJsonPath('order.balance_amount', '6000.00')
+            ->assertJsonPath('order.stock_deduction_status', 'none');
+
+        $register->refresh();
+        $this->assertSame('4000.00', $register->cash_sale_amount);
+        $this->assertDatabaseMissing('sales', ['order_id' => $order->id]);
+    }
+
     public function test_delivery_tab_returns_active_delivery_orders()
     {
         $order = Order::query()->create([

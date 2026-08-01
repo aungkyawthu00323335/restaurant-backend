@@ -42,11 +42,11 @@ use App\Models\TableMergeMember;
 use App\Models\TaxRate;
 use App\Models\UserSession;
 use App\Services\OrderStockService;
-use App\Services\WaiterPanelService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -147,16 +147,31 @@ class WaiterPanelController extends Controller
         return response()->json(array_merge([
             'outlets' => $outlets,
             'floors' => $floors,
-            'delivery_partners' => ['Own Delivery', 'Food panda', 'Grab', 'Other'],
+            'delivery_partners' => config('services.delivery.partners', []),
             'user' => $user?->only(['id', 'name', 'email']),
         ], is_array($menuData) ? $menuData : []));
     }
 
     public function menuData(): JsonResponse
     {
-        $foodMenuCategories = Category::query()->where('is_active', true)->get(['id', 'name']);
+        $outletId = request()->integer('location_id') ?: null;
+        $userKey = request()->user()?->id ?? 'guest';
+        $cacheKey = 'pos.menu-data.'.((string) $userKey).'.'.($outletId ?? 'all');
 
-        $outletId = request('location_id');
+        // Menu/catalog data is database-driven. A short scoped cache prevents
+        // every waiter screen refresh from reserializing the full catalog.
+        $payload = Cache::remember(
+            $cacheKey,
+            now()->addSeconds((int) config('pos.catalog_cache_seconds', 10)),
+            fn (): array => $this->buildMenuData($outletId),
+        );
+
+        return response()->json($payload);
+    }
+
+    private function buildMenuData(?int $outletId): array
+    {
+        $foodMenuCategories = Category::query()->where('is_active', true)->get(['id', 'name']);
 
         $foodMenus = FoodMenu::query()
             ->where('food_menus.is_active', true)
@@ -166,11 +181,26 @@ class WaiterPanelController extends Controller
             }])
             ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->where('location_id', $outletId)]))
             ->get();
+
+        $productionMenuIds = $foodMenus
+            ->where('stock_deduction_method', 'production_stock')
+            ->pluck('id');
+        $productionStock = collect();
+        if ($outletId && $productionMenuIds->isNotEmpty()) {
+            $productionStock = IngredientStockMovement::query()
+                ->whereIn('food_menu_id', $productionMenuIds)
+                ->where('location_id', (int) $outletId)
+                ->select('food_menu_id')
+                ->selectRaw("COALESCE(SUM(CASE WHEN LOWER(direction) = 'in' THEN quantity_consumption ELSE -quantity_consumption END), 0) AS net")
+                ->groupBy('food_menu_id')
+                ->pluck('net', 'food_menu_id');
+        }
+
         foreach ($foodMenus as $menu) {
             foreach ($menu->modifierGroups as $modifier) {
                 $this->attachModifierOptionIds($modifier);
             }
-            if ($menu->locations && $menu->locations->isNotEmpty()) {
+            if ($outletId && $menu->locations && $menu->locations->isNotEmpty()) {
                 $pivot = $menu->locations->first()->pivot;
                 if ($pivot->is_active) {
                     $menu->dine_in_price = $pivot->dine_in_price ?? $menu->dine_in_price;
@@ -179,11 +209,7 @@ class WaiterPanelController extends Controller
                 }
             }
             if ($outletId && $menu->stock_deduction_method === 'production_stock') {
-                $menu->current_stock_qty = (float) IngredientStockMovement::query()
-                    ->where('food_menu_id', $menu->id)
-                    ->where('location_id', (int) $outletId)
-                    ->selectRaw("COALESCE(SUM(CASE WHEN LOWER(direction) = 'in' THEN quantity_consumption ELSE -quantity_consumption END), 0) AS net")
-                    ->value('net');
+                $menu->current_stock_qty = (float) ($productionStock[$menu->id] ?? 0);
             }
             unset($menu->locations);
         }
@@ -196,7 +222,7 @@ class WaiterPanelController extends Controller
             ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->where('location_id', $outletId)]))
             ->get();
         foreach ($products as $product) {
-            if ($product->locations && $product->locations->isNotEmpty()) {
+            if ($outletId && $product->locations && $product->locations->isNotEmpty()) {
                 $pivot = $product->locations->first()->pivot;
                 if ($pivot->is_active) {
                     $product->sell_price_per_unit = $pivot->sell_price_per_unit ?? $product->sell_price_per_unit;
@@ -213,7 +239,7 @@ class WaiterPanelController extends Controller
             ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->where('location_id', $outletId)]))
             ->get();
         foreach ($combos as $combo) {
-            if ($combo->locations && $combo->locations->isNotEmpty()) {
+            if ($outletId && $combo->locations && $combo->locations->isNotEmpty()) {
                 $pivot = $combo->locations->first()->pivot;
                 if ($pivot->is_active) {
                     $combo->dine_in_price = $pivot->dine_in_price ?? $combo->dine_in_price;
@@ -240,7 +266,7 @@ class WaiterPanelController extends Controller
 
         $productCategories = ProductCategory::query()->where('is_active', true)->get(['id', 'name']);
 
-        return response()->json([
+        return [
             'food_menu_categories' => $foodMenuCategories,
             'product_categories' => $productCategories,
             'food_menus' => $foodMenus,
@@ -252,7 +278,7 @@ class WaiterPanelController extends Controller
             'charges' => $charges,
             'discounts' => $discounts,
             'payment_methods' => PaymentMethod::query()->where('is_active', true)->get(['id', 'name']),
-        ]);
+        ];
     }
 
     private function attachMenuFallbackImages($items): void
@@ -688,7 +714,7 @@ class WaiterPanelController extends Controller
             });
         }
 
-        $orders = $query->orderBy('created_at', 'desc')->paginate($request->get('per_page', 20));
+        $orders = $query->orderBy('created_at', 'desc')->paginate($this->boundedPageSize($request, 20));
 
         return response()->json($orders);
     }
@@ -721,6 +747,7 @@ class WaiterPanelController extends Controller
             'order_discount_value' => 'nullable|numeric|min:0',
             'tax_rate_id' => 'nullable|integer|exists:tax_rates,id',
             'charge_id' => 'nullable|integer|exists:charges,id',
+            'auto_confirm' => 'nullable|boolean',
             'items' => 'required|array|min:1',
             'items.*.item_type' => 'required|in:food_menu,product,combo',
             'items.*.item_id' => 'required|integer',
@@ -1587,6 +1614,15 @@ class WaiterPanelController extends Controller
 
             if ($newStatus === 'cancelled') {
                 return response()->json(['message' => 'Use the cancel action with a reason.'], 422);
+            }
+
+            if ($newStatus === 'completed') {
+                if ($order->payment_state !== 'paid' || ! $order->sale()->exists()) {
+                    return response()->json([
+                        'message' => 'An order must be fully paid and have a completed sale before it can be completed.',
+                        'errors' => ['order_status' => ['Complete payment at the cashier first.']],
+                    ], 422);
+                }
             }
 
             $order->update([
@@ -3248,8 +3284,16 @@ class WaiterPanelController extends Controller
 
         $printerIdSnap = null;
         if ($itemType === 'food_menu') {
-            $item = FoodMenu::query()->withoutGlobalScopes()->with('unit')->find($itemId);
-            if (! $item) {
+            $item = FoodMenu::query()->withoutGlobalScopes()
+                ->whereNull('food_menus.deleted_at')
+                ->where('food_menus.is_active', true)
+                ->with([
+                    'unit',
+                    'locations' => fn ($query) => $query->whereKey($outletId),
+                ])
+                ->find($itemId);
+            $outletPrice = $item?->locations?->first();
+            if (! $item || ($outletPrice && ! $outletPrice->pivot->is_active)) {
                 throw new \Exception("Food Menu #{$itemId} not found.");
             }
             $itemName = $item->name;
@@ -3257,35 +3301,56 @@ class WaiterPanelController extends Controller
             $costSnap = $item->cost_per_unit ?? 0;
             $printerIdSnap = $item->printer_id;
 
+            $dineInPrice = $outletPrice?->pivot->dine_in_price ?? $item->dine_in_price;
+            $takeAwayPrice = $outletPrice?->pivot->take_away_price ?? $item->take_away_price;
+            $deliveryPrice = $outletPrice?->pivot->delivery_price ?? $item->delivery_price;
             $basePrice = match ($orderType) {
-                'dine_in' => (float) ($item->dine_in_price ?? 0),
-                'takeaway' => (float) ($item->take_away_price ?? 0),
-                'delivery' => (float) ($item->delivery_price ?? 0),
-                default => (float) ($item->dine_in_price ?? 0),
+                'dine_in' => (float) ($dineInPrice ?? 0),
+                'takeaway' => (float) ($takeAwayPrice ?? 0),
+                'delivery' => (float) ($deliveryPrice ?? 0),
+                default => (float) ($dineInPrice ?? 0),
             };
         } elseif ($itemType === 'product') {
-            $item = Product::query()->with('productUnit')->find($itemId);
-            if (! $item) {
+            $item = Product::query()->withoutGlobalScopes()
+                ->whereNull('products.deleted_at')
+                ->where('products.is_active', true)
+                ->with([
+                    'productUnit',
+                    'locations' => fn ($query) => $query->whereKey($outletId),
+                ])
+                ->find($itemId);
+            $outletPrice = $item?->locations?->first();
+            if (! $item || ($outletPrice && ! $outletPrice->pivot->is_active)) {
                 throw new \Exception("Product #{$itemId} not found.");
             }
             $itemName = $item->name;
             $unitName = $item->productUnit?->name ?? '';
-            $basePrice = (float) ($item->sell_price_per_unit ?? 0);
+            $basePrice = (float) ($outletPrice?->pivot->sell_price_per_unit ?? $item->sell_price_per_unit ?? 0);
             $costSnap = (float) ($item->purchase_price_per_unit ?? 0);
         } elseif ($itemType === 'combo') {
-            $item = ComboMenu::query()->find($itemId);
-            if (! $item) {
+            $item = ComboMenu::query()->withoutGlobalScopes()
+                ->whereNull('combo_menus.deleted_at')
+                ->where('combo_menus.is_active', true)
+                ->with([
+                    'locations' => fn ($query) => $query->whereKey($outletId),
+                ])
+                ->find($itemId);
+            $outletPrice = $item?->locations?->first();
+            if (! $item || ($outletPrice && ! $outletPrice->pivot->is_active)) {
                 throw new \Exception("Combo #{$itemId} not found.");
             }
             $itemName = $item->name;
             $unitName = '';
             $costSnap = $item->cost_per_unit ?? 0;
 
+            $dineInPrice = $outletPrice?->pivot->dine_in_price ?? $item->dine_in_price;
+            $takeAwayPrice = $outletPrice?->pivot->take_away_price ?? $item->take_away_price;
+            $deliveryPrice = $outletPrice?->pivot->delivery_price ?? $item->delivery_price;
             $basePrice = match ($orderType) {
-                'dine_in' => (float) ($item->dine_in_price ?? 0),
-                'takeaway' => (float) ($item->take_away_price ?? 0),
-                'delivery' => (float) ($item->delivery_price ?? 0),
-                default => (float) ($item->dine_in_price ?? 0),
+                'dine_in' => (float) ($dineInPrice ?? 0),
+                'takeaway' => (float) ($takeAwayPrice ?? 0),
+                'delivery' => (float) ($deliveryPrice ?? 0),
+                default => (float) ($dineInPrice ?? 0),
             };
         }
 

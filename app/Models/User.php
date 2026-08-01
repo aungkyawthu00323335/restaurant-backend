@@ -108,13 +108,11 @@ class User extends Authenticatable
                 ->all();
         }
 
-        $assignedId = $this->default_outlet_id;
-        if ($assignedId !== null && $this->outlets()->withoutGlobalScopes()->whereKey($assignedId)->exists()) {
-            return [(int) $assignedId];
-        }
-
-        $firstId = $this->outlets()->withoutGlobalScopes()->value('locations.id');
-        return $firstId === null ? [] : [(int) $firstId];
+        return $this->outlets()
+            ->withoutGlobalScopes()
+            ->pluck('locations.id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
     }
 
     /**

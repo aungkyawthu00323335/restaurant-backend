@@ -104,7 +104,7 @@ class DeliveryOrderController extends Controller
                 'charges' => $charges,
                 'printers' => $printers,
                 'food_menu_categories' => $foodMenuCategories,
-                'delivery_partners' => ['Own Delivery', 'Food panda', 'Grab', 'Other'],
+                  'delivery_partners' => config('services.delivery.partners', []),
             ],
         ]);
     }

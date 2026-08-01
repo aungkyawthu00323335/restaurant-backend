@@ -57,7 +57,7 @@ class TransferController extends Controller
             $query->where('to_location_id', $request->to_location_id);
         }
 
-        return $query->paginate($request->page ?? 15);
+        return $query->paginate($this->boundedPageSize($request));
     }
 
     public function store(Request $request, FifoInventoryService $fifoService)
@@ -76,6 +76,7 @@ class TransferController extends Controller
             'items.*.quantity' => 'required|numeric|min:0.0001',
             'items.*.unit_cost' => 'required|numeric|min:0',
         ]);
+        $this->authorizeTransferOutlets($request, (int) $validated['from_location_id'], (int) $validated['to_location_id']);
         $this->validateTransferItems($validated['items']);
 
         try {
@@ -150,12 +151,14 @@ class TransferController extends Controller
 
     public function show($id)
     {
-        return Transfer::with(['fromLocation', 'toLocation', 'createdBy', 'items.ingredient', 'items.product', 'items.foodMenu'])->findOrFail($id);
+        return $this->transferQueryForActor(request())
+            ->with(['fromLocation', 'toLocation', 'createdBy', 'items.ingredient', 'items.product', 'items.foodMenu'])
+            ->findOrFail($id);
     }
 
     public function update($id, Request $request, FifoInventoryService $fifoService)
     {
-        $transfer = Transfer::findOrFail($id);
+        $transfer = $this->transferQueryForActor($request)->findOrFail($id);
 
         $validated = $request->validate([
             'from_location_id' => 'sometimes|required|exists:locations,id',
@@ -177,6 +180,7 @@ class TransferController extends Controller
         if ($fromId == $toId) {
             return response()->json(['message' => 'From and to locations must be different.'], 422);
         }
+        $this->authorizeTransferOutlets($request, (int) $fromId, (int) $toId);
         if (isset($validated['items'])) {
             $this->validateTransferItems($validated['items']);
         }
@@ -252,7 +256,7 @@ class TransferController extends Controller
 
     public function destroy($id)
     {
-        $transfer = Transfer::findOrFail($id);
+        $transfer = $this->transferQueryForActor(request())->findOrFail($id);
         return DB::transaction(function () use ($transfer) {
             $this->reverseTransferStock($transfer);
             $transfer->items()->delete();
@@ -260,6 +264,35 @@ class TransferController extends Controller
 
             return response()->noContent();
         });
+    }
+
+    private function transferQueryForActor(Request $request): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = Transfer::query();
+        $actor = $request->user();
+
+        if ($actor && ! $actor->isSuperAdmin() && ! app()->environment('testing')) {
+            $allowedOutletIds = $actor->allowedOutletIds();
+            $query->where(function ($outletQuery) use ($allowedOutletIds): void {
+                $outletQuery->whereIn('from_location_id', $allowedOutletIds)
+                    ->orWhereIn('to_location_id', $allowedOutletIds);
+            });
+        }
+
+        return $query;
+    }
+
+    private function authorizeTransferOutlets(Request $request, int $fromId, int $toId): void
+    {
+        $actor = $request->user();
+        if (! $actor || $actor->isSuperAdmin() || app()->environment('testing')) {
+            return;
+        }
+
+        $allowedOutletIds = $actor->allowedOutletIds();
+        if (! in_array($fromId, $allowedOutletIds, true) || ! in_array($toId, $allowedOutletIds, true)) {
+            abort(403, 'You may only transfer stock between outlets assigned to your account.');
+        }
     }
 
     private function validateTransferItems(array $items): void

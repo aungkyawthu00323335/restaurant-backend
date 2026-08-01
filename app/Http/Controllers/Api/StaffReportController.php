@@ -28,6 +28,7 @@ class StaffReportController extends Controller
             'weekly' => '%X-W%V',
             default => '%M %d, %Y',
         };
+        $periodExpr = $this->datePeriodExpression('s.sale_at', $dateFormat);
 
         $refundTotals = DB::table('refunds')
             ->select('sale_id', DB::raw('SUM(refund_amount) as refund_amount'))
@@ -40,7 +41,7 @@ class StaffReportController extends Controller
                 $join->on('s.id', '=', 'refund_totals.sale_id');
             })
             ->selectRaw("
-                DATE_FORMAT(s.sale_at, '{$dateFormat}') as period,
+                {$periodExpr} as period,
                 u.id as user_id,
                 u.name as staff_member,
                 COUNT(s.id) as orders_count,
@@ -63,7 +64,7 @@ class StaffReportController extends Controller
             $query->whereDate('s.sale_at', '<=', $payload['date_to']);
         }
 
-        $query->groupByRaw("DATE_FORMAT(s.sale_at, '{$dateFormat}'), u.id, u.name");
+        $query->groupByRaw("{$periodExpr}, u.id, u.name");
         $query->orderByRaw("MAX(s.sale_at) DESC");
 
         $items = $query->get();
@@ -109,7 +110,7 @@ class StaffReportController extends Controller
         }
 
         $page = (int)($request->page ?? 1);
-        $perPage = (int)($payload['per_page'] ?? 15);
+        $perPage = $this->reportPageSize($request);
         $offset = ($page - 1) * $perPage;
         
         $paginated = array_slice($formatted, $offset, $perPage);
@@ -133,7 +134,7 @@ class StaffReportController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $data = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -183,7 +184,7 @@ class StaffReportController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $rows = $response['data'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -214,5 +215,19 @@ class StaffReportController extends Controller
         return response($csv)
             ->header('Content-Type', 'text/csv; charset=UTF-8')
             ->header('Content-Disposition', 'attachment; filename="staff_report.csv"');
+    }
+
+    private function datePeriodExpression(string $column, string $mysqlFormat): string
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            return "DATE_FORMAT({$column}, '{$mysqlFormat}')";
+        }
+
+        return match ($mysqlFormat) {
+            '%Y' => "strftime('%Y', {$column})",
+            '%M %Y' => "strftime('%Y-%m', {$column})",
+            '%X-W%V' => "strftime('%Y-W%W', {$column})",
+            default => "strftime('%Y-%m-%d', {$column})",
+        };
     }
 }

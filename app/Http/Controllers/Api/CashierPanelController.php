@@ -282,7 +282,6 @@ class CashierPanelController extends Controller
                     ->orWhere('id', $s)
                     ->orWhere('customer_name', 'like', "%{$s}%")
                     ->orWhere('customer_phone', 'like', "%{$s}%")
-                    ->orWhere('table_no', 'like', "%{$s}%")
                     ->orWhereHas('table', function ($tQ) use ($s, $cleanTableNum) {
                         $tQ->where('table_no', 'like', "%{$s}%")
                             ->orWhere('name', 'like', "%{$s}%");
@@ -290,11 +289,10 @@ class CashierPanelController extends Controller
                             $tQ->orWhere('table_no', 'like', "%{$cleanTableNum}%")
                                 ->orWhere('name', 'like', "%{$cleanTableNum}%");
                         }
-                    });
+                });
 
                 if (! empty($cleanTableNum)) {
-                    $q->orWhere('table_no', 'like', "%{$cleanTableNum}%")
-                        ->orWhere('id', (int) $cleanTableNum);
+                    $q->orWhere('id', (int) $cleanTableNum);
                 }
             });
         }
@@ -308,7 +306,7 @@ class CashierPanelController extends Controller
         }
 
         $orders = $query->orderBy('created_at', 'desc')
-            ->paginate($request->get('per_page', 50));
+            ->paginate($this->boundedPageSize($request, 50));
 
         return response()->json($orders);
     }
@@ -524,19 +522,16 @@ class CashierPanelController extends Controller
             $order->load(['items.modifiers', 'items.comboComponents']);
 
             $totalPaid = collect($validated['payments'])->sum('amount');
-            $calcPaid = round($totalPaid + (float) $order->paid_amount, 2);
+            $previousPaid = round((float) $order->paid_amount, 2);
+            $calcPaid = round($totalPaid + $previousPaid, 2);
             $calcGrand = round((float) $order->grand_total, 2);
+            $outstandingBeforePayment = max(0, round($calcGrand - $previousPaid, 2));
 
             $diff = $calcGrand - $calcPaid;
             // 1. Kyat rounding tolerance (e.g. 0.25 or 0.50 MMK difference is rounded as full payment)
             if ($diff > 0 && $diff <= 1.0) {
                 $calcPaid = $calcGrand;
                 $diff = 0;
-            }
-
-            // Stock Deduction for Food Menu, Combo Menu, Product
-            if ($order->stock_deduction_status !== 'deducted') {
-                $this->deductOrderStock($order, $order->outlet_id);
             }
 
             // Record payment details
@@ -551,12 +546,6 @@ class CashierPanelController extends Controller
                 ]);
             }
 
-            // Create Sale Header & Sale Item records
-            $this->createSaleWithDetails($order, $order->outlet_id, $user?->id, $validated['payments'], $register->id);
-            
-            // Update Register Cash and Non-Cash totals
-            $this->updateRegisterPaymentTotals($register, $validated['payments'], $calcPaid);
-
             if ($diff <= 1.0) {
                 $balanceAmount = 0.0;
                 $changeAmount = max(0, round($calcPaid - $calcGrand, 2));
@@ -569,6 +558,32 @@ class CashierPanelController extends Controller
                 $orderStatus = 'confirmed';
             }
 
+            // Register totals reflect only the amount due from this payment,
+            // excluding any change returned to the customer.
+            $this->updateRegisterPaymentTotals(
+                $register,
+                $validated['payments'],
+                min((float) $totalPaid, (float) $outstandingBeforePayment),
+            );
+
+            if ($paymentState === 'paid') {
+                if ($order->stock_deduction_status !== 'deducted') {
+                    $this->deductOrderStock($order, $order->outlet_id);
+                }
+
+                $allPayments = $order->payments()
+                    ->get(['payment_method_id', 'amount'])
+                    ->map(fn (Payment $payment): array => [
+                        'payment_method_id' => (int) $payment->payment_method_id,
+                        'amount' => (float) $payment->amount,
+                    ])
+                    ->all();
+
+                // Financial sales are created only after the order is fully
+                // paid, and include every payment in a split settlement.
+                $this->createSaleWithDetails($order, $order->outlet_id, $user?->id, $allPayments, $register->id);
+            }
+
             $order->update([
                 'paid_amount' => $calcPaid,
                 'balance_amount' => $balanceAmount,
@@ -576,8 +591,12 @@ class CashierPanelController extends Controller
                 'payment_completed_at' => $paymentState === 'paid' ? Carbon::now() : $order->payment_completed_at,
                 'payment_state' => $paymentState,
                 'order_status' => $orderStatus,
-                'stock_deduction_status' => 'deducted',
-                'stock_deducted_at' => Carbon::now(),
+                'stock_deduction_status' => $paymentState === 'paid'
+                    ? 'deducted'
+                    : $order->stock_deduction_status,
+                'stock_deducted_at' => $paymentState === 'paid'
+                    ? ($order->stock_deducted_at ?? Carbon::now())
+                    : $order->stock_deducted_at,
             ]);
 
             // Release Dine-in Table if fully paid and no active orders remain
@@ -593,7 +612,9 @@ class CashierPanelController extends Controller
                 }
             }
 
-            $this->printBillDocument($order);
+            if ($paymentState === 'paid') {
+                $this->printBillDocument($order);
+            }
 
             $order->load([
                 'items.modifiers',
@@ -789,7 +810,7 @@ class CashierPanelController extends Controller
         }
 
         $sales = $query->orderBy('sale_at', 'desc')
-            ->paginate($request->get('per_page', 30));
+            ->paginate($this->boundedPageSize($request, 30));
 
         $sales->getCollection()->transform(function (Sale $sale) {
             $paidAmount = round((float) $sale->payments->sum('amount'), 2);

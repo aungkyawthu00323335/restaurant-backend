@@ -11,6 +11,8 @@ return new class extends Migration
         Schema::table('products', function (Blueprint $table): void {
             $table->dropForeign(['category_id']);
             $table->dropForeign(['unit_id']);
+            $table->dropIndex(['category_id', 'is_active']);
+            $table->dropIndex(['unit_id', 'is_active']);
             $table->dropColumn('category_id');
             $table->dropColumn('unit_id');
 
@@ -27,6 +29,8 @@ return new class extends Migration
         Schema::table('products', function (Blueprint $table): void {
             $table->dropForeign(['product_category_id']);
             $table->dropForeign(['product_unit_id']);
+            $table->dropIndex(['product_category_id']);
+            $table->dropIndex(['product_unit_id']);
             $table->dropColumn('product_category_id');
             $table->dropColumn('product_unit_id');
 

@@ -442,6 +442,7 @@ class FoodMenuProductionController extends Controller
     {
         $query = FoodMenuProduction::query()->with(['location', 'foodMenu', 'unit', 'details']);
         $this->applyFilters($query, $request->all());
+        $this->enforceExportLimit($query);
         $records = $query->orderByDesc('production_date')->orderByDesc('id')->get();
         $escape = static fn ($value): string => '"'.str_replace('"', '""', (string) ($value ?? '')).'"';
         $output = "\xEF\xBB\xBF".implode(',', ['Reference', 'Production Date', 'Outlet', 'Food Menu', 'Production Qty', 'Unit', 'Ingredient Items', 'Total Cost', 'Cost Per Unit', 'Status', 'Created By'])."\n";
@@ -471,6 +472,7 @@ class FoodMenuProductionController extends Controller
     {
         $query = FoodMenuProduction::query()->with(['location', 'foodMenu', 'unit', 'details']);
         $this->applyFilters($query, $request->all());
+        $this->enforceExportLimit($query);
         $records = $query->orderByDesc('production_date')->orderByDesc('id')->get();
         $html = '<!doctype html><html><head><meta charset="UTF-8"><title>Food Menu Production Report</title><style>body{font-family:Arial,sans-serif;color:#0f172a;margin:24px}h1{color:#2563eb}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dbe3ef;padding:8px;text-align:left}th{background:#2563eb;color:#fff}tr:nth-child(even){background:#f8fafc}</style></head><body><h1>Food Menu Production Report</h1><p>Generated '.date('Y-m-d H:i:s').' · Total '.count($records).'</p><table><thead><tr><th>Reference</th><th>Date</th><th>Outlet</th><th>Food Menu</th><th>Qty</th><th>Ingredient Items</th><th>Total Cost</th><th>Unit Cost</th><th>Status</th></tr></thead><tbody>';
         foreach ($records as $record) {

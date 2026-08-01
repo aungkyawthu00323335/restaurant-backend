@@ -134,15 +134,19 @@ class ProfitLossService
         if (!empty($filters['date_from']) && !empty($filters['date_to'])) {
             $diffDays = $filters['date_from']->diffInDays($filters['date_to']);
             $format = $diffDays <= 60 ? '%Y-%m-%d' : '%Y-%m';
+            $salesPeriodExpr = self::datePeriodExpression('sale_at', $format);
+            $refundPeriodExpr = self::datePeriodExpression('refunds.created_at', $format);
+            $cogsPeriodExpr = self::datePeriodExpression('sales.sale_at', $format);
+            $expensePeriodExpr = self::datePeriodExpression('date', $format);
 
             $salesBreakdown = (clone $salesQuery)
-                ->selectRaw("DATE_FORMAT(sale_at, '{$format}') as date, SUM(total_amount) as amount")
+                ->selectRaw("{$salesPeriodExpr} as date, SUM(total_amount) as amount")
                 ->groupBy('date')
                 ->get()
                 ->keyBy('date');
 
             $refundsBreakdown = (clone $refundsQuery)
-                ->selectRaw("DATE_FORMAT(refunds.created_at, '{$format}') as date, SUM(refund_amount) as amount")
+                ->selectRaw("{$refundPeriodExpr} as date, SUM(refund_amount) as amount")
                 ->groupBy('date')
                 ->get()
                 ->keyBy('date');
@@ -153,7 +157,7 @@ class ProfitLossService
                 ->when(!empty($filters['date_from']), fn($q) => $q->where('sales.sale_at', '>=', $filters['date_from']))
                 ->when(!empty($filters['date_to']), fn($q) => $q->where('sales.sale_at', '<=', $filters['date_to']))
                 ->when(!empty($filters['outlet_id']), fn($q) => $q->where('sales.outlet_id', $filters['outlet_id']))
-                ->selectRaw("DATE_FORMAT(sales.sale_at, '{$format}') as date, SUM(sale_items.qty * sale_items.cost_snapshot) as total_cogs")
+                ->selectRaw("{$cogsPeriodExpr} as date, SUM(sale_items.qty * sale_items.cost_snapshot) as total_cogs")
                 ->groupBy('date')
                 ->get()
                 ->keyBy('date');
@@ -163,7 +167,7 @@ class ProfitLossService
                 ->when(!empty($filters['date_from']), fn($q) => $q->where('date', '>=', $filters['date_from']))
                 ->when(!empty($filters['date_to']), fn($q) => $q->where('date', '<=', $filters['date_to']))
                 ->when(!empty($filters['outlet_id']), fn($q) => $q->where('outlet_id', $filters['outlet_id']))
-                ->selectRaw("DATE_FORMAT(date, '{$format}') as date, SUM(amount) as total_expenses")
+                ->selectRaw("{$expensePeriodExpr} as date, SUM(amount) as total_expenses")
                 ->groupBy('date')
                 ->get()
                 ->keyBy('date');
@@ -199,6 +203,15 @@ class ProfitLossService
             }
         }
         return $breakdown;
+    }
+
+    private static function datePeriodExpression(string $column, string $mysqlFormat): string
+    {
+        if (DB::getDriverName() !== 'sqlite') {
+            return "DATE_FORMAT({$column}, '{$mysqlFormat}')";
+        }
+
+        return "strftime('".($mysqlFormat === '%Y-%m-%d' ? '%Y-%m-%d' : '%Y-%m')."', {$column})";
     }
 }
 ?>

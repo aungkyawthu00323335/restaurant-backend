@@ -30,7 +30,7 @@ class IngredientCategoryController extends Controller
             ->orderBy($sortCol, $sortDir);
 
         $perPage = (int) $request->integer('per_page', 10);
-        $perPage = ($perPage > 0 && $perPage <= 5000) ? $perPage : 10;
+        $perPage = ($perPage > 0 && $perPage <= (int) config('pos.max_page_size', 100)) ? $perPage : 10;
 
         return response()->json($query->paginate($perPage));
     }

@@ -18,7 +18,7 @@ return new class extends Migration
 
         // Update food_menus table foreign key
         Schema::table('food_menus', function (Blueprint $table): void {
-            $table->dropForeign('food_menus_unit_id_foreign');
+            $table->dropForeign(['unit_id']);
             $table->foreign('unit_id')
                 ->references('id')
                 ->on('food_menu_units')
@@ -27,7 +27,7 @@ return new class extends Migration
 
         // Update food_menu_productions table foreign key
         Schema::table('food_menu_productions', function (Blueprint $table): void {
-            $table->dropForeign('food_menu_productions_unit_id_foreign');
+            $table->dropForeign(['unit_id']);
             $table->foreign('unit_id')
                 ->references('id')
                 ->on('food_menu_units')
@@ -39,7 +39,7 @@ return new class extends Migration
     {
         // Revert food_menu_productions table foreign key
         Schema::table('food_menu_productions', function (Blueprint $table): void {
-            $table->dropForeign('food_menu_productions_unit_id_foreign');
+            $table->dropForeign(['unit_id']);
             $table->foreign('unit_id')
                 ->references('id')
                 ->on('consumption_units')
@@ -48,7 +48,7 @@ return new class extends Migration
 
         // Revert food_menus table foreign key
         Schema::table('food_menus', function (Blueprint $table): void {
-            $table->dropForeign('food_menus_unit_id_foreign');
+            $table->dropForeign(['unit_id']);
             $table->foreign('unit_id')
                 ->references('id')
                 ->on('consumption_units')

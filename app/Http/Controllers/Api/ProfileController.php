@@ -65,7 +65,7 @@ class ProfileController extends Controller
     public function activityLog(Request $request): JsonResponse
     {
         $user = $request->user();
-        $perPage = $request->query('per_page', 15);
+        $perPage = $this->boundedPageSize($request);
 
         $logs = $user->activityLogs()
             ->latest()

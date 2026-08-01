@@ -21,12 +21,20 @@ class SetOutletContext
         App::forgetInstance('current_outlet_id');
         App::forgetInstance('active_outlet_id');
 
-        $outletId = $request->header('X-Outlet-Id') 
-            ?? $request->input('location_id') 
-            ?? $request->input('outlet_id');
+        $outletId = $request->header('X-Outlet-Id');
+        $outletId ??= $request->input('location_id');
+        $outletId ??= $request->input('outlet_id');
 
-        if ($outletId !== null && $outletId !== '' && (int)$outletId > 0) {
-            $parsedId = (int)$outletId;
+        if ($outletId !== null && $outletId !== '') {
+            $outletIdString = trim((string) $outletId);
+            if (! ctype_digit($outletIdString) || (int) $outletIdString < 1) {
+                return response()->json([
+                    'message' => 'The outlet context must be a positive integer.',
+                    'errors' => ['outlet_id' => ['Provide a valid outlet id.']],
+                ], Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
+
+            $parsedId = (int) $outletIdString;
 
             // This middleware runs before and after authentication. Enforce
             // the assignment check on the authenticated pass.

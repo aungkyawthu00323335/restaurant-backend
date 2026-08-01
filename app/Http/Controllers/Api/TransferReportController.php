@@ -48,6 +48,8 @@ class TransferReportController extends Controller
         if ($request->start_date) $query->whereDate('transfer_date', '>=', $request->start_date);
         if ($request->end_date) $query->whereDate('transfer_date', '<=', $request->end_date);
 
+        $this->enforceExportLimit($query);
+
         $items = [];
         $total = 0.0;
         foreach ($query->get() as $transfer) {

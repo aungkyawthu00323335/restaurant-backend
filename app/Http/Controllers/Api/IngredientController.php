@@ -38,7 +38,7 @@ class IngredientController extends Controller
             ->orderBy($sortCol, $sortDir);
 
         $perPage = (int) $request->integer('per_page', 10);
-        $perPage = ($perPage > 0 && $perPage <= 5000) ? $perPage : 10;
+        $perPage = ($perPage > 0 && $perPage <= (int) config('pos.max_page_size', 100)) ? $perPage : 10;
 
         $paginator = $query->paginate($perPage);
         $this->appendCurrentStockData($paginator->items());
@@ -485,6 +485,7 @@ class IngredientController extends Controller
                     ->orWhere('barcode', 'like', "%{$search}%");
             });
         }
+        $this->enforceExportLimit($query);
         $ingredients = $query->orderByDesc('id')->get();
         $selectedLocationId = $request->filled('location_id') ? (int) $request->input('location_id') : null;
         $locations = Location::query()->whereNull('deleted_at')->orderBy('name')->get(['id', 'name']);
@@ -565,6 +566,7 @@ class IngredientController extends Controller
                     ->orWhere('barcode', 'like', "%{$search}%");
             });
         }
+        $this->enforceExportLimit($query);
         $ingredients = $query->orderByDesc('id')->get();
         $this->appendCurrentStockData($ingredients->all());
 

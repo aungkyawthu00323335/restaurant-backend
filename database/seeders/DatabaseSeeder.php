@@ -14,7 +14,12 @@ class DatabaseSeeder extends Seeder
         $this->call([
             SuperAdminSeeder::class,
             PrinterSeeder::class,
-            SampleDataSeeder::class,
         ]);
+
+        // Demo catalog data is useful for local QA, but must never be inserted
+        // into a production database by a normal deployment seed command.
+        if (app()->environment(['local', 'testing'])) {
+            $this->call(SampleDataSeeder::class);
+        }
     }
 }

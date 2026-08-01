@@ -18,6 +18,13 @@ class RequirePermission
         $user = $request->user();
         $permissions = $permissions ?: $this->permissionsForPath($request);
 
+        if ($permissions === null) {
+            return new JsonResponse([
+                'message' => 'This route has no permission mapping.',
+                'request_id' => $request->attributes->get('request_id'),
+            ], Response::HTTP_FORBIDDEN);
+        }
+
         // Authentication and outlet access are enforced separately. Routes
         // without a module mapping remain available to authenticated users.
         if (! $user || $permissions === []) {
@@ -37,8 +44,8 @@ class RequirePermission
         ], Response::HTTP_FORBIDDEN);
     }
 
-    /** @return list<string> */
-    private function permissionsForPath(Request $request): array
+    /** @return list<string>|null */
+    private function permissionsForPath(Request $request): ?array
     {
         $path = $request->path();
         $path = preg_replace('#^api/v1/#', '', $path) ?? $path;
@@ -69,7 +76,7 @@ class RequirePermission
             str_starts_with($path, 'security/') => ['view_activities'],
             str_starts_with($path, 'locations') => ['view_locations', 'view_waiter_panel', 'view_cashier_panel', 'view_orders', 'view_sales', 'view_ingredients', 'view_purchases', 'view_transfers'],
             str_starts_with($path, 'currencies') || str_starts_with($path, 'payment-methods') || str_starts_with($path, 'tax-rates') || str_starts_with($path, 'discounts') || str_starts_with($path, 'charges') || str_starts_with($path, 'printers') => ['view_settings', 'view_printers'],
-            default => [],
+            default => null,
         };
     }
 }

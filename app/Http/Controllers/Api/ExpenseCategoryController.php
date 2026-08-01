@@ -12,7 +12,7 @@ class ExpenseCategoryController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 10);
+        $perPage = $this->boundedPageSize($request, 10);
         $search = $request->input('search');
 
         $query = ExpenseCategory::query();

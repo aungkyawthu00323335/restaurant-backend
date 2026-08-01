@@ -94,6 +94,7 @@ class EnsureOutletAccess
             || str_starts_with($path, 'products')
             || str_starts_with($path, 'food-menu')
             || str_starts_with($path, 'inventory/')
+            || str_starts_with($path, 'pos/')
             || str_starts_with($path, 'purchases')
             || str_starts_with($path, 'suppliers')
             || str_starts_with($path, 'expenses')

@@ -27,7 +27,7 @@ class UserController extends Controller
         $status = $request->input('status');
         $sortCol = $request->input('sort_col', 'id');
         $sortDir = $request->input('sort_dir', 'desc');
-        $perPage = (int) $request->input('per_page', 10);
+        $perPage = $this->boundedPageSize($request, 10);
 
         $query = User::with(['outlets', 'defaultOutlet', 'role']);
         $this->scopeUsersForActor($query, $request->user());

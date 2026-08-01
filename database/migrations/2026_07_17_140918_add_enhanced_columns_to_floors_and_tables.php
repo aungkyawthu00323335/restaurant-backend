@@ -89,8 +89,7 @@ return new class extends Migration
 
     private function addIndexIfNotExists(string $table, array $columns, string $indexName, bool $unique = true): void
     {
-        $indexes = DB::select("SHOW INDEX FROM `{$table}` WHERE Key_name = ?", [$indexName]);
-        if (empty($indexes)) {
+        if (! $this->indexExists($table, $indexName)) {
             Schema::table($table, function (Blueprint $t) use ($columns, $indexName, $unique) {
                 if ($unique) {
                     $t->unique($columns, $indexName);
@@ -104,6 +103,21 @@ return new class extends Migration
     private function addPlainIndexIfNotExists(string $table, array $columns, string $indexName): void
     {
         $this->addIndexIfNotExists($table, $columns, $indexName, false);
+    }
+
+    private function indexExists(string $table, string $indexName): bool
+    {
+        if (DB::getDriverName() === 'sqlite') {
+            foreach (DB::select("PRAGMA index_list('{$table}')") as $index) {
+                if (($index->name ?? null) === $indexName) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return DB::select("SHOW INDEX FROM `{$table}` WHERE Key_name = ?", [$indexName]) !== [];
     }
 
     public function down(): void

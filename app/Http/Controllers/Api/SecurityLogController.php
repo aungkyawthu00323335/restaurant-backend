@@ -17,7 +17,7 @@ class SecurityLogController extends Controller
     {
         $search = $request->input('search');
         $status = $request->input('status');
-        $perPage = (int) $request->input('per_page', 15);
+        $perPage = $this->boundedPageSize($request);
 
         $query = LoginHistory::with('user');
 
@@ -44,7 +44,7 @@ class SecurityLogController extends Controller
     {
         $search = $request->input('search');
         $module = $request->input('module');
-        $perPage = (int) $request->input('per_page', 15);
+        $perPage = $this->boundedPageSize($request);
 
         $query = ActivityLog::with('user');
 

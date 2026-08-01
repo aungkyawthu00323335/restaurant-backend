@@ -55,7 +55,7 @@ class ProfitLossReportController extends Controller
 
     public function exportPdf(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $data = $response['breakdown'] ?? [];
         $summary = $response['summary'] ?? [];
@@ -118,7 +118,7 @@ class ProfitLossReportController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $request->merge(['page' => 1, 'per_page' => 100000]);
+        $this->prepareReportExport($request);
         $response = $this->index($request)->getData(true);
         $rows = $response['breakdown'] ?? [];
         $summary = $response['summary'] ?? [];
