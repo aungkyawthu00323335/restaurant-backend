@@ -20,7 +20,24 @@ class PrinterController extends Controller
         $sortDir = $request->string('sort_dir')->toString() === 'asc' ? 'asc' : 'desc';
 
         $query = Printer::query()
+            ->with('location:id,name')
             ->when($request->has('active'), fn ($query) => $query->where('is_active', $request->boolean('active')))
+            ->when($request->filled('location_id'), function ($query) use ($request): void {
+                $locId = (int) $request->input('location_id');
+                if ($locId > 0) {
+                    $query->where(function ($sub) use ($locId): void {
+                        $sub->where('location_id', $locId)->orWhereNull('location_id');
+                    });
+                }
+            })
+            ->when($request->filled('outlet_id'), function ($query) use ($request): void {
+                $locId = (int) $request->input('outlet_id');
+                if ($locId > 0) {
+                    $query->where(function ($sub) use ($locId): void {
+                        $sub->where('location_id', $locId)->orWhereNull('location_id');
+                    });
+                }
+            })
             ->when($request->string('search')->isNotEmpty(), function ($query) use ($request): void {
                 $search = $request->string('search')->toString();
                 $query->where(function ($query) use ($search): void {
@@ -40,13 +57,14 @@ class PrinterController extends Controller
     public function store(Request $request): JsonResponse
     {
         $payload = $this->validatePayload($request);
+        $printer = Printer::create($payload);
 
-        return response()->json(Printer::create($payload), 201);
+        return response()->json($printer->load('location:id,name'), 201);
     }
 
     public function show(Printer $printer): JsonResponse
     {
-        return response()->json($printer);
+        return response()->json($printer->load('location:id,name'));
     }
 
     public function update(Request $request, Printer $printer): JsonResponse
@@ -55,7 +73,7 @@ class PrinterController extends Controller
 
         $printer->update($payload);
 
-        return response()->json($printer->refresh());
+        return response()->json($printer->refresh()->load('location:id,name'));
     }
 
     public function destroy(Printer $printer): JsonResponse
@@ -82,6 +100,7 @@ class PrinterController extends Controller
 
         $ts = now()->format('Y-m-d H:i:s');
         $line = str_repeat('-', $printer->paper_size === '58mm' ? 32 : 42)."\n";
+        $locName = $printer->location?->name ?? 'All Outlets';
 
         $slip = "\x1B\x40"
             ."\x1B\x45\x01"
@@ -89,6 +108,7 @@ class PrinterController extends Controller
             ."\x1B\x45\x00"
             ."                 PRINTER TEST SLIP\n"
             .$line
+            ."Outlet   : {$locName}\n"
             ."Printer  : {$printer->name}\n"
             ."IP       : {$printer->ip_address}\n"
             ."Port     : {$printer->port}\n"
@@ -139,6 +159,7 @@ class PrinterController extends Controller
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:120'],
+            'location_id' => ['nullable', 'integer', 'exists:locations,id'],
             'ip_address' => [
                 'required',
                 'ipv4',

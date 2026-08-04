@@ -33,7 +33,7 @@ class ReservationBusinessRulesTest extends TestCase
     public function test_invalid_status_transition_is_rejected_and_cancellation_is_soft(): void
     {
         [$location, $floor, $table] = $this->setupTable(capacity: 4);
-        $date = now()->toDateString();
+        $date = now()->addDay()->toDateString();
         $payload = $this->payload($location, $floor, $table, $date, 2, '18:00');
         $payload['status'] = 'confirmed';
 
