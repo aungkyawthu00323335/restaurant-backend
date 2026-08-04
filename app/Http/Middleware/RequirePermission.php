@@ -59,7 +59,7 @@ class RequirePermission
             str_starts_with($path, 'reservations') => ['view_reservations'],
             str_starts_with($path, 'floors') || str_starts_with($path, 'tables') => ['view_floor'],
             str_starts_with($path, 'deliveries') => ['view_delivery', 'view_orders'],
-            str_starts_with($path, 'ingredients') || str_starts_with($path, 'ingredient-') => ['view_ingredients'],
+            str_starts_with($path, 'ingredients') || str_starts_with($path, 'ingredient-') || str_starts_with($path, 'purchase-units') || str_starts_with($path, 'consumption-units') => ['view_ingredients'],
             str_starts_with($path, 'products') || str_starts_with($path, 'product-') => ['view_products'],
             str_starts_with($path, 'food-menu') || str_starts_with($path, 'combo-menus') || str_starts_with($path, 'modifiers') || $path === 'categories' => ['view_foodmenus'],
             str_starts_with($path, 'suppliers') || str_starts_with($path, 'purchases') || $path === 'purchase-report' => ['view_suppliers', 'view_purchases'],
