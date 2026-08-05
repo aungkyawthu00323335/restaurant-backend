@@ -42,8 +42,10 @@ class ComboMenuController extends Controller
         $perPage = (int) ($payload['per_page'] ?? 20);
         $perPage = in_array($perPage, [10, 20, 30, 50, 100], true) ? $perPage : 20;
 
+        $locationId = isset($payload['location_id']) ? (int) $payload['location_id'] : null;
+
         $records = $query->paginate($perPage)->through(
-            fn (ComboMenu $combo): array => $this->listResource($combo)
+            fn (ComboMenu $combo): array => $this->listResource($combo, $locationId)
         );
 
         $filteredQuery = ComboMenu::query();
@@ -382,7 +384,7 @@ class ComboMenuController extends Controller
         }
     }
 
-    private function listResource(ComboMenu $combo): array
+    private function listResource(ComboMenu $combo, ?int $locationId = null): array
     {
         $componentCount = $combo->items->count();
         $itemData = $combo->items->map(fn (ComboMenuItem $item): array => [
@@ -398,6 +400,19 @@ class ComboMenuController extends Controller
         $dineInPrice = (float) $combo->dine_in_price;
         $takeAwayPrice = (float) $combo->take_away_price;
         $deliveryPrice = (float) $combo->delivery_price;
+
+        if ($locationId !== null) {
+            $pivot = DB::table('location_combo_menu')
+                ->where('location_id', $locationId)
+                ->where('combo_menu_id', $combo->id)
+                ->first(['dine_in_price', 'take_away_price', 'delivery_price']);
+
+            if ($pivot !== null) {
+                $dineInPrice = (float) ($pivot->dine_in_price ?? $dineInPrice);
+                $takeAwayPrice = (float) ($pivot->take_away_price ?? $takeAwayPrice);
+                $deliveryPrice = (float) ($pivot->delivery_price ?? $deliveryPrice);
+            }
+        }
 
         return [
             'id' => $combo->id,

@@ -262,6 +262,19 @@ class FoodMenuController extends Controller
     {
         $data = $foodMenu->attributesToArray();
 
+        if ($locationId !== null) {
+            $pivot = DB::table('location_food_menu')
+                ->where('location_id', $locationId)
+                ->where('food_menu_id', $foodMenu->id)
+                ->first(['dine_in_price', 'take_away_price', 'delivery_price']);
+
+            if ($pivot !== null) {
+                $data['dine_in_price'] = $pivot->dine_in_price ?? $data['dine_in_price'];
+                $data['take_away_price'] = $pivot->take_away_price ?? $data['take_away_price'];
+                $data['delivery_price'] = $pivot->delivery_price ?? $data['delivery_price'];
+            }
+        }
+
         $data['category_name'] = $foodMenu->category?->name;
         $data['printer_name'] = $foodMenu->printer?->name;
         $data['unit_name'] = $foodMenu->unit?->name;

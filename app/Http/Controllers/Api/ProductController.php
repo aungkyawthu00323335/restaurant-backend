@@ -1097,6 +1097,18 @@ class ProductController extends Controller
 
         $purchasePrice = (float) $product->purchase_price_per_unit;
         $sellPrice = (float) $product->sell_price_per_unit;
+
+        if ($locationId !== null) {
+            $pivot = DB::table('location_product')
+                ->where('location_id', $locationId)
+                ->where('product_id', $product->id)
+                ->first(['sell_price_per_unit']);
+
+            if ($pivot !== null) {
+                $sellPrice = (float) ($pivot->sell_price_per_unit ?? $sellPrice);
+            }
+        }
+
         $profitPerUnit = round($sellPrice - $purchasePrice, 2);
         $stockValue = round($currentStock * $purchasePrice, 2);
 
