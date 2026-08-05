@@ -1505,26 +1505,8 @@ class CashierPanelController extends Controller
 
     private function sendDocumentToPrinter(Order $order, string $text, string $documentType, bool $isReprint = false, $printerId = null): void
     {
-        $query = Printer::query()->where('is_active', true);
-
-        if ($printerId) {
-            $printers = collect([$query->find($printerId)])->filter();
-        } else {
-            $target = (clone $query)->where('name', 'like', '%cashier%')->first() ?? $query->first();
-            $printers = $target ? collect([$target]) : collect();
-        }
-
-        foreach ($printers as $printer) {
-            try {
-                $escPosService = app(\App\Services\EscPosPrintService::class);
-                $formatted = $escPosService->preparePayload($printer, $text, '', '');
-
-                $queueService = app(\App\Services\PrinterQueueService::class);
-                $queueService->sendToPrinter($printer, $formatted, $text, $documentType, $order->id, $isReprint);
-            } catch (\Exception $e) {
-                Log::error("Printer {$printer->name} error: ".$e->getMessage());
-            }
-        }
+        // Backend printing disabled.
+        // All Bill/Check printing is handled by the Flutter frontend via 80mm web printing.
     }
 
     private function printBillDocument(Order $order): void

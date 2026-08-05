@@ -784,11 +784,13 @@ class WaiterPanelController extends Controller
                 if (! $table->is_active || $table->status === 'inactive') {
                     throw ValidationException::withMessages(['table_id' => 'Table is inactive.']);
                 }
-                if ((int) $table->outlet_id !== (int) $outletId ||
-                    (int) $table->floor_id !== (int) ($validated['floor_id'] ?? 0)) {
+                if ((int) $table->floor_id !== (int) ($validated['floor_id'] ?? 0)) {
                     throw ValidationException::withMessages([
-                        'table_id' => 'The table must belong to the selected outlet and floor.',
+                        'table_id' => 'The table must belong to the selected floor.',
                     ]);
+                }
+                if ((int) $table->outlet_id !== (int) $outletId) {
+                    $table->update(['outlet_id' => $outletId]);
                 }
                 if ($table->status === 'merged' && $table->merged_with_table_id) {
                     $primaryTable = RestaurantTable::query()->lockForUpdate()->find($table->merged_with_table_id);
@@ -3293,7 +3295,7 @@ class WaiterPanelController extends Controller
                 ])
                 ->find($itemId);
             $outletPrice = $item?->locations?->first();
-            if (! $item || ($outletPrice && ! $outletPrice->pivot->is_active)) {
+            if (! $item || ($outletPrice && isset($outletPrice->pivot->is_active) && ! $outletPrice->pivot->is_active)) {
                 throw new \Exception("Food Menu #{$itemId} not found.");
             }
             $itemName = $item->name;
@@ -3320,7 +3322,7 @@ class WaiterPanelController extends Controller
                 ])
                 ->find($itemId);
             $outletPrice = $item?->locations?->first();
-            if (! $item || ($outletPrice && ! $outletPrice->pivot->is_active)) {
+            if (! $item || ($outletPrice && isset($outletPrice->pivot->is_active) && ! $outletPrice->pivot->is_active)) {
                 throw new \Exception("Product #{$itemId} not found.");
             }
             $itemName = $item->name;
@@ -3336,7 +3338,7 @@ class WaiterPanelController extends Controller
                 ])
                 ->find($itemId);
             $outletPrice = $item?->locations?->first();
-            if (! $item || ($outletPrice && ! $outletPrice->pivot->is_active)) {
+            if (! $item || ($outletPrice && isset($outletPrice->pivot->is_active) && ! $outletPrice->pivot->is_active)) {
                 throw new \Exception("Combo #{$itemId} not found.");
             }
             $itemName = $item->name;
@@ -3793,48 +3795,14 @@ class WaiterPanelController extends Controller
 
     private function dispatchPrint(Order $order, bool $isReprint = false): void
     {
-        if (app()->runningUnitTests()) {
-            return;
-        }
-
-        $orderId = (int) $order->id;
-        $phpBinary = PHP_BINARY;
-        $artisanPath = base_path('artisan');
-        $reprintFlag = $isReprint ? ' --reprint' : '';
-
-        if (str_contains(PHP_OS_FAMILY, 'Windows')) {
-            $cmd = "start /B \"\" \"{$phpBinary}\" \"{$artisanPath}\" print:order {$orderId}{$reprintFlag} > NUL 2>&1";
-            @pclose(@popen($cmd, 'r'));
-        } else {
-            $cmd = "\"{$phpBinary}\" \"{$artisanPath}\" print:order {$orderId}{$reprintFlag} > /dev/null 2>&1 &";
-            @pclose(@popen($cmd, 'r'));
-        }
+        // Backend printing disabled.
+        // All KOT printing is handled by the Flutter frontend via 80mm web printing.
     }
 
     private function dispatchPrintChanges(Order $order, array $newItems, array $cancelledItems): void
     {
-        if (app()->runningUnitTests()) {
-            $this->printChangedItems($order, $newItems, $cancelledItems);
-            return;
-        }
-
-        $orderId = (int) $order->id;
-        $phpBinary = PHP_BINARY;
-        $artisanPath = base_path('artisan');
-
-        $cacheKey = "print_changes_" . $orderId . "_" . microtime(true) . "_" . uniqid();
-        \Illuminate\Support\Facades\Cache::put($cacheKey, [
-            'new' => $newItems,
-            'cancelled' => $cancelledItems
-        ], 120);
-
-        if (str_contains(PHP_OS_FAMILY, 'Windows')) {
-            $cmd = "start /B \"\" \"{$phpBinary}\" \"{$artisanPath}\" print:order-changes {$orderId} {$cacheKey} > NUL 2>&1";
-            @pclose(@popen($cmd, 'r'));
-        } else {
-            $cmd = "\"{$phpBinary}\" \"{$artisanPath}\" print:order-changes {$orderId} {$cacheKey} > /dev/null 2>&1 &";
-            @pclose(@popen($cmd, 'r'));
-        }
+        // Backend printing disabled.
+        // All KOT change printing is handled by the Flutter frontend via 80mm web printing.
     }
 
     private function printChangedItems(Order $order, array $newItems, array $cancelledItems): void
@@ -4055,29 +4023,100 @@ class WaiterPanelController extends Controller
         }
     }
 
+    private function resolvePrinterForOutlet(?int $targetPrinterId, ?int $outletId, ?Printer $fallbackPrinter): ?Printer
+    {
+        if ($targetPrinterId) {
+            $target = Printer::query()->find($targetPrinterId);
+            if ($target && $target->is_active) {
+                if ($outletId === null || $target->location_id === null || (int) $target->location_id === (int) $outletId) {
+                    return $target;
+                }
+                $matched = Printer::query()
+                    ->where('is_active', true)
+                    ->where('location_id', $outletId)
+                    ->where('name', $target->name)
+                    ->first()
+                    ?? Printer::query()
+                        ->where('is_active', true)
+                        ->where('location_id', $outletId)
+                        ->first();
+                if ($matched) {
+                    return $matched;
+                }
+            }
+        }
+
+        return $fallbackPrinter;
+    }
+
     private function buildPrinterGroups(Order $order): array
     {
         $printerGroups = [];
         $items = $order->items()->get();
+        $outletId = $order->outlet_id ? (int) $order->outlet_id : null;
 
         $defaultPrinter = Printer::query()
             ->where('is_active', true)
-            ->first();
+            ->where(function ($q) use ($outletId) {
+                if ($outletId) {
+                    $q->where('location_id', $outletId)->orWhereNull('location_id');
+                }
+            })
+            ->orderByRaw('location_id IS NOT NULL DESC')
+            ->first() ?? Printer::query()->first();
 
         $kitchenPrinter = Printer::query()
             ->where('is_active', true)
-            ->where('name', 'Kitchen Printer')
-            ->first() ?? $defaultPrinter;
+            ->where(function ($q) use ($outletId) {
+                if ($outletId) {
+                    $q->where('location_id', $outletId);
+                }
+            })
+            ->where(function ($q) {
+                $q->where('name', 'like', '%Kitchen%')->orWhere('name', 'like', '%KDS%');
+            })
+            ->first();
+
+        if (! $kitchenPrinter && $outletId) {
+            $kitchenPrinter = Printer::query()
+                ->where('is_active', true)
+                ->where('location_id', $outletId)
+                ->first();
+        }
+
+        if (! $kitchenPrinter) {
+            $kitchenPrinter = $defaultPrinter;
+        }
 
         $productPrinter = Printer::query()
             ->where('is_active', true)
-            ->where('name', 'Product Printer')
-            ->first() ?? $defaultPrinter;
+            ->where(function ($q) use ($outletId) {
+                if ($outletId) {
+                    $q->where('location_id', $outletId);
+                }
+            })
+            ->where(function ($q) {
+                $q->where('name', 'like', '%Product%')->orWhere('name', 'like', '%Bar%');
+            })
+            ->first();
+
+        if (! $productPrinter && $outletId) {
+            $productPrinter = Printer::query()
+                ->where('is_active', true)
+                ->where('location_id', $outletId)
+                ->first();
+        }
+
+        if (! $productPrinter) {
+            $productPrinter = $defaultPrinter;
+        }
 
         foreach ($items as $item) {
             if ($item->item_type === 'food_menu') {
                 $menu = FoodMenu::query()->with('printer')->find($item->item_id);
-                $printerId = $item->printer_id_snapshot ?? $menu?->printer_id ?? $kitchenPrinter?->id ?? $defaultPrinter?->id;
+                $rawPrinterId = $item->printer_id_snapshot ?? $menu?->printer_id;
+                $resolved = $this->resolvePrinterForOutlet($rawPrinterId, $outletId, $kitchenPrinter);
+                $printerId = $resolved?->id;
                 if ($printerId) {
                     $modifiers = $item->modifiers->pluck('modifier_item_name_snapshot')->filter()->join(', ');
                     
@@ -4105,7 +4144,9 @@ class WaiterPanelController extends Controller
                 }
             } elseif ($item->item_type === 'product') {
                 $product = Product::query()->with('printer')->find($item->item_id);
-                $printerId = $item->printer_id_snapshot ?? $product?->printer_id ?? $productPrinter?->id ?? $defaultPrinter?->id;
+                $rawPrinterId = $item->printer_id_snapshot ?? $product?->printer_id;
+                $resolved = $this->resolvePrinterForOutlet($rawPrinterId, $outletId, $productPrinter);
+                $printerId = $resolved?->id;
                 if ($printerId) {
                     $foundKey = null;
                     if (isset($printerGroups[$printerId])) {
