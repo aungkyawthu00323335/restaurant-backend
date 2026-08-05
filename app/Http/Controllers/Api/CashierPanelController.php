@@ -1190,27 +1190,22 @@ class CashierPanelController extends Controller
 
         $text .= $sep;
         $text .= $this->buildReceiptItemsTableText($order, $w);
-
         $text .= $this->formatSummaryLine('Subtotal:', number_format((float) $order->subtotal, 0), $w);
 
-        if ((float) $order->order_discount_amount > 0) {
-            $discVal = (float) ($order->order_discount_value ?? 0);
-            $discType = strtolower((string) ($order->order_discount_type ?? 'fixed'));
-            $discLabel = ($discType === 'percent' || $discType === 'percentage') && $discVal > 0 
-                ? 'Discount ('.(int)$discVal.'%):' 
-                : 'Discount:';
-            $text .= $this->formatSummaryLine($discLabel, '-'.number_format((float) $order->order_discount_amount, 0), $w);
-        }
-        if ((float) $order->service_charge_amount > 0) {
-            $scRate = (float) ($order->service_charge_rate_snapshot ?? 0);
-            $scLabel = $scRate > 0 ? 'Service Charge ('.(int)$scRate.'%):' : 'Service Charge:';
-            $text .= $this->formatSummaryLine($scLabel, number_format((float) $order->service_charge_amount, 0), $w);
-        }
-        if ((float) $order->tax_amount > 0) {
-            $taxRate = (float) ($order->tax_rate_snapshot ?? 0);
-            $taxLabel = $taxRate > 0 ? 'Commercial Tax ('.(int)$taxRate.'%):' : 'Tax:';
-            $text .= $this->formatSummaryLine($taxLabel, number_format((float) $order->tax_amount, 0), $w);
-        }
+        $discVal = (float) ($order->order_discount_value ?? 0);
+        $discType = strtolower((string) ($order->order_discount_type ?? 'fixed'));
+        $discLabel = ($discType === 'percent' || $discType === 'percentage') && $discVal > 0 
+            ? 'Discount ('.(int)$discVal.'%):' 
+            : 'Discount:';
+        $text .= $this->formatSummaryLine($discLabel, '-'.number_format((float) $order->order_discount_amount, 0), $w);
+
+        $scRate = (float) ($order->service_charge_rate_snapshot ?? 0);
+        $scLabel = $scRate > 0 ? 'Service Charge ('.(int)$scRate.'%):' : 'Service Charge:';
+        $text .= $this->formatSummaryLine($scLabel, number_format((float) $order->service_charge_amount, 0), $w);
+
+        $taxRate = (float) ($order->tax_rate_snapshot ?? 0);
+        $taxLabel = $taxRate > 0 ? 'Commercial Tax ('.(int)$taxRate.'%):' : 'Commercial Tax:';
+        $text .= $this->formatSummaryLine($taxLabel, number_format((float) $order->tax_amount, 0), $w);
 
         $majorCurrency = \App\Models\Currency::where('is_major', true)->first();
         $currencySymbol = $majorCurrency?->symbol ?? 'Ks';
@@ -1219,6 +1214,7 @@ class CashierPanelController extends Controller
         $text .= $this->formatSummaryLine('TOTAL AMOUNT:', number_format((float) $order->grand_total, 0).' '.$currencySymbol, $w);
         $text .= $sep;
 
+        $totalPaid = 0.0;
         if (!empty($customPayments) && is_array($customPayments)) {
             $text .= "PAYMENT BREAKDOWN:\n";
             $pmIds = collect($customPayments)->pluck('payment_method_id')->filter()->unique();
@@ -1231,6 +1227,7 @@ class CashierPanelController extends Controller
                 }
             }
             $text .= $sep;
+            $totalPaid = (float) collect($customPayments)->sum('amount');
         } elseif ($order->payments && $order->payments->isNotEmpty()) {
             $text .= "PAYMENT BREAKDOWN:\n";
             foreach ($order->payments as $payment) {
@@ -1238,7 +1235,27 @@ class CashierPanelController extends Controller
                 $text .= $this->formatSummaryLine("  {$pmName}:", number_format((float) $payment->amount, 0), $w);
             }
             $text .= $sep;
+            $totalPaid = (float) $order->payments->sum('amount');
         }
+
+        $change = 0.0;
+        $balance = (float) $order->grand_total;
+        if ($totalPaid > 0) {
+            $change = max(0.0, $totalPaid - (float) $order->grand_total);
+            $balance = max(0.0, (float) $order->grand_total - $totalPaid);
+        } else {
+            if ($order->payment_state === 'paid') {
+                $change = (float) $order->change_amount;
+                $balance = 0.0;
+            } else {
+                $change = (float) $order->change_amount;
+                $balance = (float) $order->balance_amount;
+            }
+        }
+
+        $text .= $this->formatSummaryLine('Paid Amount:', number_format($totalPaid, 0).' '.$currencySymbol, $w);
+        $text .= $this->formatSummaryLine('Change Amount:', number_format($change, 0).' '.$currencySymbol, $w);
+        $text .= $this->formatSummaryLine('Balance Due:', number_format($balance, 0).' '.$currencySymbol, $w);
 
         $text .= str_pad('Thank you for dining with us!', $w, ' ', STR_PAD_BOTH)."\n";
         $text .= str_pad('Please visit again!', $w, ' ', STR_PAD_BOTH)."\n";
@@ -1299,27 +1316,22 @@ class CashierPanelController extends Controller
 
         $text .= $sep;
         $text .= $this->buildReceiptItemsTableText($order, $w);
-
         $text .= $this->formatSummaryLine('Subtotal:', number_format((float) $order->subtotal, 0), $w);
 
-        if ((float) $order->order_discount_amount > 0) {
-            $discVal = (float) ($order->order_discount_value ?? 0);
-            $discType = strtolower((string) ($order->order_discount_type ?? 'fixed'));
-            $discLabel = ($discType === 'percent' || $discType === 'percentage') && $discVal > 0 
-                ? 'Discount ('.(int)$discVal.'%):' 
-                : 'Discount:';
-            $text .= $this->formatSummaryLine($discLabel, '-'.number_format((float) $order->order_discount_amount, 0), $w);
-        }
-        if ((float) $order->service_charge_amount > 0) {
-            $scRate = (float) ($order->service_charge_rate_snapshot ?? 0);
-            $scLabel = $scRate > 0 ? 'Service Charge ('.(int)$scRate.'%):' : 'Service Charge:';
-            $text .= $this->formatSummaryLine($scLabel, number_format((float) $order->service_charge_amount, 0), $w);
-        }
-        if ((float) $order->tax_amount > 0) {
-            $taxRate = (float) ($order->tax_rate_snapshot ?? 0);
-            $taxLabel = $taxRate > 0 ? 'Commercial Tax ('.(int)$taxRate.'%):' : 'Tax:';
-            $text .= $this->formatSummaryLine($taxLabel, number_format((float) $order->tax_amount, 0), $w);
-        }
+        $discVal = (float) ($order->order_discount_value ?? 0);
+        $discType = strtolower((string) ($order->order_discount_type ?? 'fixed'));
+        $discLabel = ($discType === 'percent' || $discType === 'percentage') && $discVal > 0 
+            ? 'Discount ('.(int)$discVal.'%):' 
+            : 'Discount:';
+        $text .= $this->formatSummaryLine($discLabel, '-'.number_format((float) $order->order_discount_amount, 0), $w);
+
+        $scRate = (float) ($order->service_charge_rate_snapshot ?? 0);
+        $scLabel = $scRate > 0 ? 'Service Charge ('.(int)$scRate.'%):' : 'Service Charge:';
+        $text .= $this->formatSummaryLine($scLabel, number_format((float) $order->service_charge_amount, 0), $w);
+
+        $taxRate = (float) ($order->tax_rate_snapshot ?? 0);
+        $taxLabel = $taxRate > 0 ? 'Commercial Tax ('.(int)$taxRate.'%):' : 'Commercial Tax:';
+        $text .= $this->formatSummaryLine($taxLabel, number_format((float) $order->tax_amount, 0), $w);
 
         $majorCurrency = \App\Models\Currency::where('is_major', true)->first();
         $currencySymbol = $majorCurrency?->symbol ?? 'Ks';
@@ -1329,6 +1341,7 @@ class CashierPanelController extends Controller
         $text .= $sep;
 
         $text .= "PAYMENT BREAKDOWN:\n";
+        $totalPaid = 0.0;
         if (!empty($customPayments) && is_array($customPayments)) {
             $pmIds = collect($customPayments)->pluck('payment_method_id')->filter()->unique();
             $pmNames = \App\Models\PaymentMethod::whereIn('id', $pmIds)->pluck('name', 'id');
@@ -1339,25 +1352,33 @@ class CashierPanelController extends Controller
                     $text .= $this->formatSummaryLine("  {$pmName}:", number_format($amt, 0), $w);
                 }
             }
+            $totalPaid = (float) collect($customPayments)->sum('amount');
         } else {
             foreach ($order->payments as $payment) {
                 $pmName = $payment->paymentMethod?->name ?? 'Payment';
                 $text .= $this->formatSummaryLine("  {$pmName}:", number_format((float) $payment->amount, 0), $w);
             }
+            $totalPaid = (float) $order->payments->sum('amount');
         }
 
-        if ((float) $order->change_amount > 0) {
-            $text .= $this->formatSummaryLine('  Change:', number_format((float) $order->change_amount, 0), $w);
+        $change = 0.0;
+        $balance = (float) $order->grand_total;
+        if ($totalPaid > 0) {
+            $change = max(0.0, $totalPaid - (float) $order->grand_total);
+            $balance = max(0.0, (float) $order->grand_total - $totalPaid);
+        } else {
+            if ($order->payment_state === 'paid') {
+                $change = (float) $order->change_amount;
+                $balance = 0.0;
+            } else {
+                $change = (float) $order->change_amount;
+                $balance = (float) $order->balance_amount;
+            }
         }
-        if ((float) $order->balance_amount > 0) {
-            $text .= $this->formatSummaryLine('  Balance Due:', number_format((float) $order->balance_amount, 0), $w);
-        }
-        if ((float) $order->change_amount > 0) {
-            $text .= $this->formatSummaryLine('  Change:', number_format((float) $order->change_amount, 0), $w);
-        }
-        if ((float) $order->balance_amount > 0) {
-            $text .= $this->formatSummaryLine('  Balance Due:', number_format((float) $order->balance_amount, 0), $w);
-        }
+
+        $text .= $this->formatSummaryLine('Paid Amount:', number_format($totalPaid, 0).' '.$currencySymbol, $w);
+        $text .= $this->formatSummaryLine('Change Amount:', number_format($change, 0).' '.$currencySymbol, $w);
+        $text .= $this->formatSummaryLine('Balance Due:', number_format($balance, 0).' '.$currencySymbol, $w);
 
         $text .= $sep;
         $text .= str_pad('Thank you for dining with us!', $w, ' ', STR_PAD_BOTH)."\n";

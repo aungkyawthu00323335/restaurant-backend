@@ -154,6 +154,7 @@ Route::prefix('v1')
                 Route::get('zx-report', [ZXReportController::class, 'index']);
                 Route::get('zx-report/excel', [ZXReportController::class, 'exportExcel']);
                 Route::get('zx-report/pdf', [ZXReportController::class, 'exportPdf']);
+                Route::get('reports/zx/pdf', [ZXReportController::class, 'exportPdf']); // Compatibility with mobile app typo
                 Route::get('zx-report/{id}', [ZXReportController::class, 'show']);
             });
             Route::middleware('idempotent')->group(function (): void {
@@ -174,6 +175,7 @@ Route::prefix('v1')
             Route::get('stock-movement-history', [IngredientStockMovementController::class, 'history']);
             Route::get('stock-movement-history/export/excel', [IngredientStockMovementController::class, 'exportHistoryExcel']);
             Route::get('stock-movement-history/export/pdf', [IngredientStockMovementController::class, 'exportHistoryPdf']);
+            Route::get('reports/stock-movements/pdf', [IngredientStockMovementController::class, 'exportHistoryPdf']); // Compatibility with mobile app typo
             Route::apiResource('ingredient-stock-movements', IngredientStockMovementController::class);
             Route::apiResource('food-menu-units', FoodMenuUnitController::class);
             Route::apiResource('food-menus', FoodMenuController::class);
