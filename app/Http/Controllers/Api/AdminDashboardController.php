@@ -260,7 +260,9 @@ class AdminDashboardController extends Controller
                 'name' => $row->name,
                 'quantity' => round((float) $row->quantity, 4),
                 'amount' => round((float) $row->amount, 2),
-            ]);
+            ])
+            ->values()
+            ->all();
 
         // ─── Recent Orders (from Order table which has order_status & grand_total) ─
         $recentOrders = Order::query()
@@ -278,7 +280,9 @@ class AdminDashboardController extends Controller
                     'status'   => ucfirst($order->order_status ?? 'pending'),
                     'time'     => $order->created_at->format('h:i A'),
                 ];
-            });
+            })
+            ->values()
+            ->all();
 
         // ─── Inventory Status ─────────────────────────────────────────────────────
         $ingredients = Ingredient::with('consumptionUnit')->where('is_active', true)->get();
@@ -363,7 +367,9 @@ class AdminDashboardController extends Controller
                     'date_time' => $label,
                     'guests'    => $res->guest_count ?? 1,
                 ];
-            });
+            })
+            ->values()
+            ->all();
 
         return [
             'summary'          => $summary,
