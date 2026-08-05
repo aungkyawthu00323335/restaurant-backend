@@ -79,8 +79,13 @@ class WaiterPanelController extends Controller
             ->with(['tables' => function ($q) use ($outletId, $allowedOutletIds) {
                 $q->withoutGlobalScope(OutletScope::class)
                     ->where('is_active', true)
-                    ->whereIn('outlet_id', $allowedOutletIds)
-                    ->when($outletId, fn ($q) => $q->where('outlet_id', $outletId))
+                    ->where(function ($q2) use ($outletId, $allowedOutletIds) {
+                        if ($outletId) {
+                            $q2->where('outlet_id', $outletId)->orWhereNull('outlet_id');
+                        } else {
+                            $q2->whereIn('outlet_id', $allowedOutletIds)->orWhereNull('outlet_id');
+                        }
+                    })
                     ->orderBy('sort_order')
                     ->orderBy('table_no');
             }])
