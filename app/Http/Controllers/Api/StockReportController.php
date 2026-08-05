@@ -28,14 +28,30 @@ class StockReportController extends Controller
 
     public function exportExcel(Request $request)
     {
+        $request->merge(['perPage' => 100000]);
         $payload = $this->reportPayload($request);
         $escape = static fn ($value): string => '"'.str_replace('"', '""', (string) ($value ?? '')).'"';
         $output = "\xEF\xBB\xBF".implode(',', ['Type', 'Item', 'SKU', 'Category', 'Stock Qty', 'Unit', 'Unit Cost', 'Stock Value', 'Batches', 'Status'])."\n";
         foreach ($payload['data'] as $row) {
+            $currentStock = (float) ($row['current_stock'] ?? 0);
+            $alertQty = isset($row['alert_quantity']) && $row['alert_quantity'] !== null ? (float) $row['alert_quantity'] : null;
+            $status = match (true) {
+                $currentStock <= 0 => 'Out of Stock',
+                $alertQty !== null && $currentStock <= $alertQty => 'Low Stock',
+                default => 'In Stock',
+            };
+
             $output .= implode(',', [
-                $escape($row['type_label']), $escape($row['name']), $escape($row['sku_code']),
-                $escape($row['category_name']), $row['current_stock'], $escape($row['stock_display']),
-                $row['unit_price'], $row['estimated_value'], $row['batch_count'], $escape($row['status']),
+                $escape($row['type_label'] ?? ''),
+                $escape($row['name'] ?? ''),
+                $escape($row['sku_code'] ?? ''),
+                $escape($row['category_name'] ?? ''),
+                $row['current_stock'] ?? 0,
+                $escape($row['stock_display'] ?? ''),
+                $row['unit_price'] ?? 0,
+                $row['estimated_value'] ?? 0,
+                $row['batch_count'] ?? 0,
+                $escape($row['status'] ?? $status),
             ])."\n";
         }
         return response($output, 200, [
@@ -46,10 +62,11 @@ class StockReportController extends Controller
 
     public function exportPdf(Request $request)
     {
+        $request->merge(['perPage' => 100000]);
         $payload = $this->reportPayload($request);
-        $html = '<!doctype html><html><head><meta charset="UTF-8"><title>Stock Report</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}h1{color:#2563eb}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dbe3ef;padding:7px;text-align:left}th{background:#2563eb;color:#fff}</style></head><body><h1>Stock Report</h1><p>Total stock value: '.number_format((float) $payload['summary']['total_stock_value'], 2).'</p><table><thead><tr><th>Type</th><th>Item</th><th>SKU</th><th>Stock Qty</th><th>Unit</th><th>Unit Cost</th><th>Stock Value</th></tr></thead><tbody>';
+        $html = '<!doctype html><html><head><meta charset="UTF-8"><title>Stock Report</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}h1{color:#2563eb}table{width:100%;border-collapse:collapse}th,td{border:1px solid #dbe3ef;padding:7px;text-align:left}th{background:#2563eb;color:#fff}</style></head><body><h1>Stock Report</h1><p>Total stock value: '.number_format((float) ($payload['summary']['total_stock_value'] ?? 0), 2).'</p><table><thead><tr><th>Type</th><th>Item</th><th>SKU</th><th>Stock Qty</th><th>Unit</th><th>Unit Cost</th><th>Stock Value</th></tr></thead><tbody>';
         foreach ($payload['data'] as $row) {
-            $html .= '<tr><td>'.e($row['type_label']).'</td><td>'.e($row['name']).'</td><td>'.e($row['sku_code']).'</td><td>'.e($row['stock_display']).'</td><td>'.e($row['consumption_unit']).'</td><td>'.number_format((float) $row['unit_price'], 2).'</td><td>'.number_format((float) $row['estimated_value'], 2).'</td></tr>';
+            $html .= '<tr><td>'.e($row['type_label'] ?? '').'</td><td>'.e($row['name'] ?? '').'</td><td>'.e($row['sku_code'] ?? '').'</td><td>'.e($row['stock_display'] ?? '').'</td><td>'.e($row['consumption_unit'] ?? '').'</td><td>'.number_format((float) ($row['unit_price'] ?? 0), 2).'</td><td>'.number_format((float) ($row['estimated_value'] ?? 0), 2).'</td></tr>';
         }
         $html .= '</tbody></table></body></html>';
         return response($html, 200, [
