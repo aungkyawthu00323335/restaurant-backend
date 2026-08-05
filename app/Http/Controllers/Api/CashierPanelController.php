@@ -284,12 +284,12 @@ class CashierPanelController extends Controller
                     ->orWhere('customer_phone', 'like', "%{$s}%")
                     ->orWhereHas('table', function ($tQ) use ($s, $cleanTableNum) {
                         $tQ->where('table_no', 'like', "%{$s}%")
-                            ->orWhere('name', 'like', "%{$s}%");
+                            ->orWhere('code', 'like', "%{$s}%");
                         if (! empty($cleanTableNum)) {
                             $tQ->orWhere('table_no', 'like', "%{$cleanTableNum}%")
-                                ->orWhere('name', 'like', "%{$cleanTableNum}%");
+                                ->orWhere('code', 'like', "%{$cleanTableNum}%");
                         }
-                });
+                    });
 
                 if (! empty($cleanTableNum)) {
                     $q->orWhere('id', (int) $cleanTableNum);
@@ -762,10 +762,10 @@ class CashierPanelController extends Controller
                             ->orWhere('table_no', 'like', "%{$s}%")
                             ->orWhereHas('table', function ($tQ) use ($s, $cleanNum) {
                                 $tQ->where('table_no', 'like', "%{$s}%")
-                                    ->orWhere('name', 'like', "%{$s}%");
+                                    ->orWhere('code', 'like', "%{$s}%");
                                 if (! empty($cleanNum)) {
                                     $tQ->orWhere('table_no', 'like', "%{$cleanNum}%")
-                                        ->orWhere('name', 'like', "%{$cleanNum}%");
+                                        ->orWhere('code', 'like', "%{$cleanNum}%");
                                 }
                             });
 
