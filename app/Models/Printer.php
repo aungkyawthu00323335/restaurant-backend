@@ -28,9 +28,10 @@ class Printer extends Model
 
             $outletId = (int) \Illuminate\Support\Facades\App::make('current_outlet_id');
             if ($outletId > 0) {
-                $query->where(function ($q) use ($outletId): void {
-                    $q->where($query->getModel()->getTable().'.location_id', $outletId)
-                        ->orWhereNull($query->getModel()->getTable().'.location_id');
+                $table = $query->getModel()->getTable();
+                $query->where(function ($q) use ($table, $outletId): void {
+                    $q->where($table.'.location_id', $outletId)
+                        ->orWhereNull($table.'.location_id');
                 });
             }
         });
