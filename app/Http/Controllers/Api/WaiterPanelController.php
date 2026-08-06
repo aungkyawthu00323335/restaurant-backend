@@ -184,7 +184,7 @@ class WaiterPanelController extends Controller
             ->with(['category:id,name', 'printer:id,name', 'unit:id,name', 'modifierGroups' => function ($q) {
                 $q->withPivot(['is_required', 'min_selection', 'max_selection', 'sort_order']);
             }])
-            ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->where('location_id', $outletId)]))
+            ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->whereKey($outletId)]))
             ->get();
 
         $productionMenuIds = $foodMenus
@@ -224,7 +224,7 @@ class WaiterPanelController extends Controller
             ->where('products.is_active', true)
             ->whereNull('products.deleted_at')
             ->with(['productCategory:id,name', 'productUnit:id,name'])
-            ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->where('location_id', $outletId)]))
+            ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->whereKey($outletId)]))
             ->get();
         foreach ($products as $product) {
             if ($outletId && $product->locations && $product->locations->isNotEmpty()) {
@@ -241,7 +241,7 @@ class WaiterPanelController extends Controller
             ->where('combo_menus.is_active', true)
             ->whereNull('combo_menus.deleted_at')
             ->with(['category:id,name', 'items'])
-            ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->where('location_id', $outletId)]))
+            ->when($outletId, fn ($q) => $q->with(['locations' => fn ($q) => $q->whereKey($outletId)]))
             ->get();
         foreach ($combos as $combo) {
             if ($outletId && $combo->locations && $combo->locations->isNotEmpty()) {
