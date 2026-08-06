@@ -26,6 +26,15 @@ class EnsureOutletAccess
         $outletId = $this->resolveOutletId($request);
         $allowedOutletIds = $user->allowedOutletIds();
 
+        // If no outlet context was provided but the user has exactly one
+        // allowed outlet, automatically use it so single-location staff
+        // (e.g. a Location 2 waiter) don't get a 422 on first load.
+        if ($outletId === null && count($allowedOutletIds) === 1) {
+            $outletId = $allowedOutletIds[0];
+            // Inject into the request so downstream controllers can read it.
+            $request->merge(['location_id' => $outletId, 'outlet_id' => $outletId]);
+        }
+
         if ($outletId !== null && ! in_array($outletId, $allowedOutletIds, true)) {
             return new JsonResponse([
                 'message' => 'You do not have permission to view this outlet.',
