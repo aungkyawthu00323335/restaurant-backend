@@ -4010,21 +4010,13 @@ class WaiterPanelController extends Controller
 
         $defaultPrinter = Printer::query()
             ->where('is_active', true)
-            ->where(function ($q) use ($outletId) {
-                if ($outletId) {
-                    $q->where('location_id', $outletId)->orWhereNull('location_id');
-                }
-            })
+            ->when($outletId, fn ($q) => $q->where(fn ($q2) => $q2->where('location_id', $outletId)->orWhereNull('location_id')))
             ->orderByRaw('location_id IS NOT NULL DESC')
             ->first() ?? Printer::query()->first();
 
         $kitchenPrinter = Printer::query()
             ->where('is_active', true)
-            ->where(function ($q) use ($outletId) {
-                if ($outletId) {
-                    $q->where('location_id', $outletId);
-                }
-            })
+            ->when($outletId, fn ($q) => $q->where('location_id', $outletId))
             ->where(function ($q) {
                 $q->where('name', 'like', '%Kitchen%')->orWhere('name', 'like', '%KDS%');
             })
@@ -4043,11 +4035,7 @@ class WaiterPanelController extends Controller
 
         $productPrinter = Printer::query()
             ->where('is_active', true)
-            ->where(function ($q) use ($outletId) {
-                if ($outletId) {
-                    $q->where('location_id', $outletId);
-                }
-            })
+            ->when($outletId, fn ($q) => $q->where('location_id', $outletId))
             ->where(function ($q) {
                 $q->where('name', 'like', '%Product%')->orWhere('name', 'like', '%Bar%');
             })
