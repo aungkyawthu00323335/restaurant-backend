@@ -1016,44 +1016,7 @@ class WaiterPanelController extends Controller
             $balanceAmount = $grandTotal;
             $changeAmount = 0;
 
-            // Handle delivery payment (split payment supported)
-            if ($orderType === 'delivery') {
-                $deliveryRegister = CashRegister::query()
-                    ->withoutGlobalScopes()
-                    ->where('outlet_id', $outletId)
-                    ->where('status', 'open')
-                    ->lockForUpdate()
-                    ->first();
-
-                if (! $deliveryRegister) {
-                    return response()->json(['message' => 'Please open register before payment.'], 422);
-                }
-
-                $payments = collect($validated['payments'] ?? []);
-                $totalPaidFromPayments = $payments->sum('amount');
-
-                if (round($totalPaidFromPayments, 2) < round($grandTotal, 2)) {
-                    return response()->json(['message' => "Total paid amount ({$totalPaidFromPayments}) is less than the grand total ({$grandTotal})."], 422);
-                }
-
-                foreach ($payments as $paymentData) {
-                    Payment::query()->create([
-                        'order_id' => $order->id,
-                        'cash_register_id' => $deliveryRegister->id,
-                        'payment_method_id' => $paymentData['payment_method_id'],
-                        'amount' => $paymentData['amount'],
-                        'created_by' => $userId,
-                    ]);
-                }
-
-                $paidAmount = $totalPaidFromPayments;
-                $balanceAmount = max(0, $grandTotal - $paidAmount);
-                $changeAmount = max(0, $paidAmount - $grandTotal);
-
-                $order->payment_completed_at = Carbon::now();
-
-            }
-
+            // No payment processing in Waiter Panel. Delivery payments are processed in Cashier Panel.
             $order->update([
                 'subtotal' => $subtotal,
                 'item_discount_amount' => $itemDiscountTotal,
@@ -1069,23 +1032,8 @@ class WaiterPanelController extends Controller
                 'paid_amount' => $paidAmount,
                 'balance_amount' => $balanceAmount,
                 'change_amount' => $changeAmount,
+                'payment_state' => 'unpaid',
             ]);
-
-            if ($orderType === 'delivery') {
-                if ($order->stock_deduction_status !== 'deducted') {
-                    $this->deductOrderStock($order, $outletId);
-                    $order->update([
-                        'stock_deduction_status' => 'deducted',
-                        'stock_deducted_at' => Carbon::now(),
-                    ]);
-                }
-                $this->createSaleFromOrder($order, $outletId, $userId, $totalCost, $deliveryRegister->id);
-                $this->updateRegisterPaymentTotals($deliveryRegister, $payments->all(), $grandTotal);
-                $order->update([
-                    'payment_state' => 'paid',
-                    'order_status' => 'pending',
-                ]);
-            }
 
             // Update table status to occupied for dine-in
             if ($orderType === 'dine_in' && $order->table_id) {

@@ -268,9 +268,7 @@ class CashierPanelController extends Controller
         } else {
             // Cashier Panel settlement queue: Active orders placed from Waiter Panel
             $query->whereNotIn('order_status', ['completed', 'cancelled']);
-            if (($targetType ?? null) !== 'delivery') {
-                $query->where('payment_state', 'unpaid');
-            }
+            $query->where('payment_state', '!=', 'paid');
         }
 
         if ($request->filled('search')) {

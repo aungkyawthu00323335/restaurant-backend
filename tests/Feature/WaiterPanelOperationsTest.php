@@ -392,7 +392,7 @@ class WaiterPanelOperationsTest extends TestCase
             'delivery_fee' => 100,
             'tax_amount' => 0,
             'grand_total' => 15100,
-            'paid_amount' => 15100,
+            'paid_amount' => 0,
         ]);
     }
 

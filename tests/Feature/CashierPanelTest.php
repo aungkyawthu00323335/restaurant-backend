@@ -326,7 +326,7 @@ class CashierPanelTest extends TestCase
             'outlet_id' => $this->location->id,
             'order_type' => 'delivery',
             'order_status' => 'pending',
-            'payment_state' => 'paid',
+            'payment_state' => 'unpaid',
             'subtotal' => 15000,
             'grand_total' => 15100,
         ]);
