@@ -61,7 +61,7 @@ class RequirePermission
             str_starts_with($path, 'deliveries') => ['view_delivery', 'view_orders'],
             str_starts_with($path, 'ingredients') || str_starts_with($path, 'ingredient-') || str_starts_with($path, 'purchase-units') || str_starts_with($path, 'consumption-units') => ['view_ingredients'],
             str_starts_with($path, 'products') || str_starts_with($path, 'product-') => ['view_products'],
-            str_starts_with($path, 'food-menu') || str_starts_with($path, 'combo-menus') || str_starts_with($path, 'modifiers') || $path === 'categories' => ['view_foodmenus'],
+            str_starts_with($path, 'food-menu') || str_starts_with($path, 'combo-menus') || str_starts_with($path, 'modifiers') || str_starts_with($path, 'categories') => ['view_foodmenus'],
             str_starts_with($path, 'suppliers') || str_starts_with($path, 'purchases') || $path === 'purchase-report' => ['view_suppliers', 'view_purchases'],
             str_starts_with($path, 'inventory/') => ['view_purchases', 'view_transfers', 'view_report_inventory', 'view_ingredients'],
             str_starts_with($path, 'stock-report') || str_starts_with($path, 'stock-movement-history') => ['view_report_inventory', 'view_ingredients'],
