@@ -962,6 +962,7 @@ class WaiterPanelController extends Controller
                                     $compName = $compItem->name;
                                     $unitName = $compItem->productUnit?->name ?? '';
                                     $costSnap = $compItem->purchase_price_per_unit ?? 0;
+                                    $printerId = $compItem->printer_id;
                                 }
                             }
 
@@ -1061,7 +1062,7 @@ class WaiterPanelController extends Controller
 
                     OrderItem::query()
                         ->where('order_id', $order->id)
-                        ->whereIn('item_type', ['food_menu', 'combo'])
+                        ->whereIn('item_type', ['food_menu', 'product', 'combo'])
                         ->update(['printed_qty' => DB::raw('active_qty')]);
 
                     $this->saveChangeHistory(
@@ -1111,7 +1112,7 @@ class WaiterPanelController extends Controller
 
                 OrderItem::query()
                     ->where('order_id', $order->id)
-                    ->whereIn('item_type', ['food_menu', 'combo'])
+                    ->whereIn('item_type', ['food_menu', 'product', 'combo'])
                     ->update(['printed_qty' => DB::raw('active_qty')]);
 
                 $this->saveChangeHistory(
@@ -1239,7 +1240,8 @@ class WaiterPanelController extends Controller
                 $oldQty = $oldItemQtys[$itemKey] ?? 0.0;
                 $newQty = (float) $itemData['qty'];
 
-                if ($itemData['item_type'] === 'food_menu') {
+                if (in_array($itemData['item_type'], ['food_menu', 'product'], true)) {
+                    $itemPrinterId = $this->getItemPrinterId($itemData['item_type'], (int) $itemData['item_id']);
                     if ($newQty > $oldQty) {
                         $newFoodMenuQtys[] = [
                             'item_id' => $itemData['item_id'],
@@ -1247,13 +1249,13 @@ class WaiterPanelController extends Controller
                             'additional_qty' => $newQty - $oldQty,
                             'modifiers' => $itemData['modifiers'] ?? [],
                             'note' => $itemData['item_note'] ?? '',
-                            'printer_id' => $this->getFoodMenuPrinterId($itemData['item_id']),
+                            'printer_id' => $itemPrinterId,
                         ];
                     } elseif ($newQty < $oldQty) {
                         $cancelledFoodMenuQtys[] = [
                             'item_name' => $orderItem->item_name_snapshot,
                             'cancelled_qty' => $oldQty - $newQty,
-                            'printer_id' => $this->getFoodMenuPrinterId($itemData['item_id']),
+                            'printer_id' => $itemPrinterId,
                         ];
                     }
                 }
@@ -1382,11 +1384,11 @@ class WaiterPanelController extends Controller
 
                 if (! $foundInNew && $oldQty > 0) {
                     [$type, $itemId] = explode('_', $itemKey, 2);
-                    if ($type === 'food_menu') {
+                    if ($type === 'food_menu' || $type === 'product') {
                         $cancelledFoodMenuQtys[] = [
                             'item_name' => $oldItemNames[$itemKey] ?? 'Item',
                             'cancelled_qty' => $oldQty,
-                            'printer_id' => $this->getFoodMenuPrinterId((int) $itemId),
+                            'printer_id' => $this->getItemPrinterId($type, (int) $itemId),
                         ];
                         $this->saveChangeHistory(
                             $order->id,
@@ -1664,31 +1666,50 @@ class WaiterPanelController extends Controller
     {
         $newFoodMenuQtys = [];
         foreach ($items as $itemData) {
-            if ($itemData['item_type'] === 'food_menu') {
-                $menu = FoodMenu::query()->find($itemData['item_id']);
+            $itemType = $itemData['item_type'] ?? 'food_menu';
+            if ($itemType === 'food_menu' || $itemType === 'product') {
+                $itemName = 'Item';
+                $printerId = null;
+                if ($itemType === 'food_menu') {
+                    $menu = FoodMenu::query()->find($itemData['item_id']);
+                    $itemName = $menu?->name ?? 'Item';
+                    $printerId = $menu?->printer_id;
+                } else {
+                    $product = Product::query()->find($itemData['item_id']);
+                    $itemName = $product?->name ?? 'Item';
+                    $printerId = $product?->printer_id;
+                }
                 $newFoodMenuQtys[] = [
                     'item_id' => $itemData['item_id'],
-                    'item_name' => $menu?->name ?? 'Item',
+                    'item_name' => $itemName,
                     'additional_qty' => (float) $itemData['qty'],
                     'modifiers' => $itemData['modifiers'] ?? [],
                     'note' => $itemData['item_note'] ?? '',
-                    'printer_id' => $this->getFoodMenuPrinterId($itemData['item_id']),
+                    'printer_id' => $printerId,
                 ];
-            } elseif ($itemData['item_type'] === 'combo') {
+            } elseif ($itemType === 'combo') {
                 $combo = ComboMenu::query()->with('items')->find($itemData['item_id']);
                 if ($combo) {
                     foreach ($combo->items as $comp) {
+                        $compName = 'Component';
+                        $printerId = null;
                         if ($comp->item_type === 'food_menu') {
                             $compItem = FoodMenu::query()->find($comp->item_id);
-                            $newFoodMenuQtys[] = [
-                                'item_id' => $comp->item_id,
-                                'item_name' => $compItem?->name ?? 'Component',
-                                'additional_qty' => (float) $comp->qty * (float) $itemData['qty'],
-                                'modifiers' => [],
-                                'note' => "From: {$combo->name}",
-                                'printer_id' => $compItem?->printer_id,
-                            ];
+                            $compName = $compItem?->name ?? 'Component';
+                            $printerId = $compItem?->printer_id;
+                        } else {
+                            $compItem = Product::query()->find($comp->item_id);
+                            $compName = $compItem?->name ?? 'Component';
+                            $printerId = $compItem?->printer_id;
                         }
+                        $newFoodMenuQtys[] = [
+                            'item_id' => $comp->item_id,
+                            'item_name' => $compName,
+                            'additional_qty' => (float) $comp->qty * (float) $itemData['qty'],
+                            'modifiers' => [],
+                            'note' => "From: {$combo->name}",
+                            'printer_id' => $printerId,
+                        ];
                     }
                 }
             }
@@ -1975,21 +1996,21 @@ class WaiterPanelController extends Controller
                     ]);
 
                     if ($order->confirmation_status === 'confirmed' &&
-                        in_array($itemData['item_type'], ['food_menu', 'combo'])) {
+                        in_array($itemData['item_type'], ['food_menu', 'product', 'combo'])) {
                         $existingItem->increment('printed_qty', (float) $itemData['qty']);
                     }
 
                     $subtotal += ($itemResult['final_unit_price'] * (float) $itemData['qty']) - $itemResult['discount_amount'];
                     $totalCost += ($itemResult['cost_snapshot'] ?? 0) * (float) $itemData['qty'];
 
-                    if ($itemData['item_type'] === 'food_menu') {
+                    if ($itemData['item_type'] === 'food_menu' || $itemData['item_type'] === 'product') {
                         $newFoodMenuQtys[] = [
                             'item_id' => $itemData['item_id'],
                             'item_name' => $existingItem->item_name_snapshot,
                             'additional_qty' => (float) $itemData['qty'],
                             'modifiers' => $itemData['modifiers'] ?? [],
                             'note' => $itemData['item_note'] ?? '',
-                            'printer_id' => $this->getFoodMenuPrinterId($itemData['item_id']),
+                            'printer_id' => $this->getItemPrinterId($itemData['item_type'], (int) $itemData['item_id']),
                         ];
                     } elseif ($itemData['item_type'] === 'combo') {
                         $components = OrderComboComponent::query()->where('order_item_id', $existingItem->id)->get();
@@ -2000,16 +2021,14 @@ class WaiterPanelController extends Controller
                                 'total_qty' => $comp->total_qty + $additionalTotalQty,
                             ]);
 
-                            if ($comp->item_type === 'food_menu') {
-                                $newFoodMenuQtys[] = [
-                                    'item_id' => $comp->item_id,
-                                    'item_name' => $comp->item_name_snapshot,
-                                    'additional_qty' => $additionalTotalQty,
-                                    'modifiers' => [],
-                                    'note' => "From: {$existingItem->item_name_snapshot}",
-                                    'printer_id' => $comp->printer_id_snapshot,
-                                ];
-                            }
+                            $newFoodMenuQtys[] = [
+                                'item_id' => $comp->item_id,
+                                'item_name' => $comp->item_name_snapshot,
+                                'additional_qty' => $additionalTotalQty,
+                                'modifiers' => [],
+                                'note' => "From: {$existingItem->item_name_snapshot}",
+                                'printer_id' => $comp->printer_id_snapshot,
+                            ];
                         }
                     }
 
@@ -2027,7 +2046,7 @@ class WaiterPanelController extends Controller
                     $itemResult['cancelled_qty'] = 0;
                     $itemResult['printed_qty'] =
                         $order->confirmation_status === 'confirmed' &&
-                        in_array($itemData['item_type'], ['food_menu', 'combo'])
+                        in_array($itemData['item_type'], ['food_menu', 'product', 'combo'])
                             ? $itemResult['qty']
                             : 0;
                     $itemResult['cancelled_printed_qty'] = 0;
@@ -2037,14 +2056,14 @@ class WaiterPanelController extends Controller
                     $itemDiscountTotal += $orderItem->discount_amount;
                     $totalCost += ($orderItem->cost_snapshot ?? 0) * $orderItem->qty;
 
-                    if ($itemData['item_type'] === 'food_menu') {
+                    if ($itemData['item_type'] === 'food_menu' || $itemData['item_type'] === 'product') {
                         $newFoodMenuQtys[] = [
                             'item_id' => $itemData['item_id'],
                             'item_name' => $orderItem->item_name_snapshot,
                             'additional_qty' => (float) $itemData['qty'],
                             'modifiers' => $itemData['modifiers'] ?? [],
                             'note' => $itemData['item_note'] ?? '',
-                            'printer_id' => $this->getFoodMenuPrinterId($itemData['item_id']),
+                            'printer_id' => $this->getItemPrinterId($itemData['item_type'], (int) $itemData['item_id']),
                         ];
                     }
 
@@ -2095,15 +2114,6 @@ class WaiterPanelController extends Controller
                                         $unitName = $compItem->unit?->name ?? '';
                                         $costSnap = $compItem->cost_per_unit ?? 0;
                                         $printerId = $compItem->printer_id;
-
-                                        $newFoodMenuQtys[] = [
-                                            'item_id' => $comp->item_id,
-                                            'item_name' => $compName,
-                                            'additional_qty' => (float) $comp->qty * (float) $itemData['qty'],
-                                            'modifiers' => [],
-                                            'note' => "From: {$combo->name}",
-                                            'printer_id' => $printerId,
-                                        ];
                                     }
                                 } else {
                                     $compItem = Product::query()->with('productUnit')->find($comp->item_id);
@@ -2111,7 +2121,19 @@ class WaiterPanelController extends Controller
                                         $compName = $compItem->name;
                                         $unitName = $compItem->productUnit?->name ?? '';
                                         $costSnap = $compItem->purchase_price_per_unit ?? 0;
+                                        $printerId = $compItem->printer_id;
                                     }
+                                }
+
+                                if ($compItem) {
+                                    $newFoodMenuQtys[] = [
+                                        'item_id' => $comp->item_id,
+                                        'item_name' => $compName,
+                                        'additional_qty' => (float) $comp->qty * (float) $itemData['qty'],
+                                        'modifiers' => [],
+                                        'note' => "From: {$combo->name}",
+                                        'printer_id' => $printerId,
+                                    ];
                                 }
 
                                 OrderComboComponent::query()->create([
@@ -2245,19 +2267,18 @@ class WaiterPanelController extends Controller
 
             // If this was a food menu item, track the cancelled print qty
             $cancelledFoodMenuQtys = [];
-            if ($orderItem->item_type === 'food_menu') {
+            if ($orderItem->item_type === 'food_menu' || $orderItem->item_type === 'product') {
                 if ($order->confirmation_status === 'confirmed') {
                     $orderItem->increment('cancelled_printed_qty', $cancelQty);
                 }
                 $cancelledFoodMenuQtys[] = [
                     'item_name' => $orderItem->item_name_snapshot,
                     'cancelled_qty' => $cancelQty,
-                    'printer_id' => $this->getFoodMenuPrinterId($orderItem->item_id),
+                    'printer_id' => $this->getItemPrinterId($orderItem->item_type, $orderItem->item_id),
                 ];
             } elseif ($orderItem->item_type === 'combo') {
                 $components = OrderComboComponent::query()
                     ->where('order_item_id', $orderItem->id)
-                    ->where('item_type', 'food_menu')
                     ->get();
                 foreach ($components as $comp) {
                     $compCancelQty = $cancelQty * (float) $comp->qty_per_combo;
@@ -3282,6 +3303,7 @@ class WaiterPanelController extends Controller
             $unitName = $item->productUnit?->name ?? '';
             $basePrice = (float) ($outletPrice?->pivot->sell_price_per_unit ?? $item->sell_price_per_unit ?? 0);
             $costSnap = (float) ($item->purchase_price_per_unit ?? 0);
+            $printerIdSnap = $item->printer_id;
         } elseif ($itemType === 'combo') {
             $item = ComboMenu::query()->withoutGlobalScopes()
                 ->whereNull('combo_menus.deleted_at')
@@ -3664,11 +3686,21 @@ class WaiterPanelController extends Controller
         return '';
     }
 
-    private function getFoodMenuPrinterId(int $foodMenuId): ?int
+    private function getItemPrinterId(string $itemType, int $itemId): ?int
     {
-        $menu = FoodMenu::query()->with('printer')->find($foodMenuId);
+        if ($itemType === 'food_menu') {
+            return FoodMenu::query()->whereKey($itemId)->value('printer_id');
+        }
+        if ($itemType === 'product') {
+            return Product::query()->whereKey($itemId)->value('printer_id');
+        }
 
-        return $menu?->printer_id;
+        return null;
+    }
+
+    private function getFoodMenuPrinterId(int $foodMenuId, string $itemType = 'food_menu'): ?int
+    {
+        return $this->getItemPrinterId($itemType, $foodMenuId);
     }
 
     private function printOrder(Order $order, bool $isReprint = false): void
